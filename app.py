@@ -860,11 +860,17 @@ with tab4:
             st.warning("Dados de dificuldades no processamento não disponíveis")
 
 with tab5:
+    
+    start_col = 1  # Skip first column (index 0)
+    end_col = -8   # Skip last 8 columns
+    filtered_df_to_show = filtered_df.iloc[:, start_col:end_col]
     st.subheader("Dados Completos")
-    st.dataframe(filtered_df, height=600)
+    st.dataframe(filtered_df_to_show, height=600)
+    
     
     # Botão para download
-    csv = filtered_df.to_csv(index=False).encode('utf-8')
+    csv = filtered_df_to_show.to_csv(index=False).encode('utf-8')
+
     st.download_button(
         label="Baixar dados filtrados (CSV)",
         data=csv,
