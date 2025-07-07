@@ -4,7 +4,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import matplotlib.pyplot as plt
-
+import numpy as np
 import streamlit.components.v1 as components
 
 
@@ -13,7 +13,8 @@ import streamlit.components.v1 as components
 st.set_page_config(
     page_title="Dashboard de Produção de Mandioca - Juruti",
     page_icon="🌱",
-    layout="wide"
+    layout="wide",
+
 )
 
 # Carregar dados
@@ -120,7 +121,7 @@ else:
     tipo_cultivo = []
 
 # Aplicar filtros
-filtered_df = df.copy()
+filtered_df = df.copy().replace('N.A.',np.nan)
 if comunidades:
     filtered_df = filtered_df[filtered_df['Comunidade'].isin(comunidades)]
 if genero and 'Sexo' in filtered_df.columns:
@@ -504,8 +505,8 @@ network_html = """
 
                             // Cria a simulação de força
                             const simulation = d3.forceSimulation(nodes)
-                                .force("link", d3.forceLink(links).id(d => d.id).distance(150))
-                                .force("charge", d3.forceManyBody().strength(-300))
+                                .force("link", d3.forceLink(links).id(d => d.id).distance(400))
+                                .force("charge", d3.forceManyBody().strength(-600))
                                 .force("center", d3.forceCenter(width / 2, height / 2))
                                 .force("collide", d3.forceCollide().radius(d => d.size + 5));
 
@@ -612,37 +613,6 @@ network_html = """
 components.html(network_html, height=700, scrolling=True)
 
 # Legenda
-st.markdown("""
-                <div style="margin-top:20px; background-color:#f0e6d8; padding:15px; border-radius:10px; border:1px solid #c5b8a8">
-                    <h4 style="color:#5d4a36; margin-top:0">Legenda:</h4>
-                    <div style="display:flex; flex-wrap:wrap; gap:15px; justify-content: space-between">
-                        <div style="display:flex; align-items:center;">
-                            <div style="width:15px; height:15px; background-color:#a52a2a; border-radius:50%; margin-right:8px"></div>
-                            <span>Maniva Tapajós</span>
-                        </div>
-                        <div style="display:flex; align-items:center">
-                            <div style="width:15px; height:15px; background-color:#d2b48c; border-radius:50%; margin-right:8px"></div>
-                            <span>APRAS</span>
-                        </div>
-                        <div style="display:flex; align-items:center">
-                            <div style="width:15px; height:15px; background-color:#cd853f; border-radius:50%; margin-right:8px"></div>
-                            <span>STTR</span>
-                        </div>
-                        <div style="display:flex; align-items:center">
-                            <div style="width:15px; height:15px; background-color:#8b4513; border-radius:50%; margin-right:8px"></div>
-                            <span>ACORJUVE</span>
-                        </div>
-                        <div style="display:flex; align-items:center">
-                            <div style="width:15px; height:15px; background-color:#a0522d; border-radius:50%; margin-right:8px"></div>
-                            <span>ACOGLEC</span>
-                        </div>
-                        <div style="display:flex; align-items:center">
-                            <div style="width:15px; height:15px; background-color:#5d4a36; border-radius:50%; margin-right:8px"></div>
-                            <span>Propriedades</span>
-                        </div>
-                    </div>
-                </div>
-    """, unsafe_allow_html=True)
 
 
 # Abas para diferentes seções
@@ -775,33 +745,7 @@ with tab2:
         else:
             st.warning("Dados de variedades de macaxeira não disponíveis")
     
-    # Gráficos de tempo de colheita
-    col3, col4 = st.columns(2, gap="large")
     
-    with col3:
-        # Tempo de colheita da mandioca
-        if 'Meses_Colheita_Mandioca' in filtered_df.columns:
-            fig = px.box(
-                filtered_df, 
-                y='Meses_Colheita_Mandioca',
-                title='Tempo de Colheita da Mandioca (meses)'
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("Dados de tempo de colheita da mandioca não disponíveis")
-    
-    with col4:
-        # Tempo de colheita da macaxeira
-        if 'Quantos meses colhe a MACAXEIRA?' in filtered_df.columns:
-            fig = px.box(
-                filtered_df, 
-                y='Quantos meses colhe a MACAXEIRA?',
-                title='Tempo de Colheita da Macaxeira (meses)'
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("Dados de tempo de colheita da macaxeira não disponíveis")
-
 with tab3:
     st.subheader("Comercialização e Processamento")
     
