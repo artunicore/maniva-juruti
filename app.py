@@ -178,65 +178,138 @@ st.markdown("---")
 st.title("Rede do Maniva Tapajós na Região de Juruti")
 network_html = """
                 <!DOCTYPE html>
-                <html>
+                <html lang="pt-br">
 
                 <head>
-                    <meta charset="UTF-8" />
-                    <title>Rede Maniva Tapajós</title>
-                    <script src="https://cdnjs.cloudflare.com/ajax/libs/sigma.js/2.4.0/sigma.min.js"></script>
-                    <script src="https://cdnjs.cloudflare.com/ajax/libs/graphology/0.25.4/graphology.umd.min.js"></script>
-
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Rede Maniva Tapajós - D3.js</title>
+                    <script src="https://d3js.org/d3.v7.min.js"></script>
                     <style>
-                       body {
-                        font-family: Arial, sans-serif;
-                        margin: 20px;
-                    }
+                        body {
+                            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                            margin: 0;
+                            padding: 20px;
+                            background-color: #f5f5f5;
+                            color: #333;
+                        }
 
-                    #filter-container {
-                        display: flex;
-                        margin-bottom: 10px;
-                        justify-content: center;
-                        align-items: center;
-                    }
-                    select {
-                    border: 2px solid #ddd;
-                    background: #eee;
-                    padding: 10px;
-                    transition: 0.4s;
-                    }
+                        h1 {
+                            text-align: center;
+                            color: #5d4a36;
+                            margin-bottom: 30px;
+                        }
 
+                        #filter-container {
+                            display: flex;
+                            justify-content: center;
+                            align-items: center;
+                            margin-bottom: 20px;
+                            padding: 15px;
+                            background-color: #fff;
+                            border-radius: 8px;
+                            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+                        }
 
-                    select,
-                    ::picker(select) {
-                        appearance: base-select;
-                    }
-                    select:hover,
-                    select:focus {
-                    background: #ddd;
-                    }
-                    
-                    select::picker-icon {
-                    color: #999;
-                    transition: 0.4s rotate;
-                    }
-                    
-                    select:open::picker-icon {
-                    rotate: 180deg;
-                    }
+                        #filter-container label {
+                            font-weight: bold;
+                            margin-right: 10px;
+                            color: #5d4a36;
+                        }
 
-                    #sigma-container {
-                        height: 600px;
-                        background-color: #f8f4f0;
-                        border-radius: 10px;
-                        border: 1px solid #c5b8a8;
-                    }
+                        #comunidade-select {
+                            padding: 8px 15px;
+                            border: 1px solid #c5b8a8;
+                            border-radius: 4px;
+                            background-color: #f8f4f0;
+                            font-size: 16px;
+                            color: #5d4a36;
+                            cursor: pointer;
+                        }
+
+                        #comunidade-select:focus {
+                            outline: none;
+                            border-color: #a52a2a;
+                        }
+
+                        #graph-container {
+                            width: 100%;
+                            height: 600px;
+                            background-color: #f8f4f0;
+                            border-radius: 10px;
+                            border: 1px solid #c5b8a8;
+                            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+                            overflow: hidden;
+                        }
+
+                        .node {
+                            stroke: #fff;
+                            stroke-width: 1.5px;
+                            cursor: pointer;
+                            transition: r 0.2s ease;
+                        }
+
+                        .node:hover {
+                            stroke-width: 3px;
+                        }
+
+                        .link {
+                            stroke: #999;
+                            stroke-opacity: 0.6;
+                        }
+
+                        .label {
+                            font-size: 10px;
+                            fill: #333;
+                            pointer-events: none;
+                            text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff, 0 -1px 0 #fff;
+                        }
+
+                        .legend {
+                            margin-top: 20px;
+                            padding: 15px;
+                            background-color: #fff;
+                            border-radius: 8px;
+                            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+                            display: flex;
+                            flex-wrap: wrap;
+                            justify-content: center;
+                            gap: 15px;
+                        }
+
+                        .legend-item {
+                            display: flex;
+                            align-items: center;
+                            margin: 0 10px;
+                        }
+
+                        .legend-color {
+                            width: 20px;
+                            height: 20px;
+                            border-radius: 50%;
+                            margin-right: 8px;
+                        }
+
+                        .tooltip {
+                            position: absolute;
+                            padding: 8px 12px;
+                            background: rgba(0, 0, 0, 0.8);
+                            color: white;
+                            border-radius: 4px;
+                            pointer-events: none;
+                            font-size: 14px;
+                            z-index: 10;
+                            opacity: 0;
+                            transition: opacity 0.3s;
+                        }
                     </style>
                 </head>
 
                 <body>
+                    <h1>Rede Maniva Tapajós</h1>
 
                     <div id="filter-container">
-                        <label for="comunidade-select"><strong>Filtrar por Comunidade:</strong></label>
+                        <label for="comunidade-select">Filtrar por Comunidade:</label>
                         <select id="comunidade-select">
                             <option value="Todos">Todas</option>
                             <option value="Comunidade Café torrado">Comunidade Café torrado</option>
@@ -246,22 +319,55 @@ network_html = """
                         </select>
                     </div>
 
-                    <div id="sigma-container"></div>
+                    <div id="graph-container"></div>
+
+                    <div class="legend">
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #a52a2a;"></div>
+                            <span>Maniva Tapajós</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #5d4a36;"></div>
+                            <span>Propriedades</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #d2b48c;"></div>
+                            <span>APRAS</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #cd853f;"></div>
+                            <span>STTR</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #8b4513;"></div>
+                            <span>ACORJUVE</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #a0522d;"></div>
+                            <span>ACOGLEC</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #d2691e;"></div>
+                            <span>ACOJUV</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #bc8f8f;"></div>
+                            <span>Sindicato</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #f4a460;"></div>
+                            <span>CONJUV</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #808080;"></div>
+                            <span>N.A.</span>
+                        </div>
+                    </div>
+
+                    <div class="tooltip"></div>
 
                     <script>
-                        const graph = new graphology.Graph();
-                        const container = document.getElementById("sigma-container");
-
-                        // Nó central
-                        graph.addNode("MANIVA TAPAJÓS", {
-                            label: "MANIVA TAPAJÓS",
-                            x: 0,
-                            y: 0,
-                            size: 30,
-                            color: "#a52a2a"
-                        });
-
-                        // Dados das propriedades, organizações e comunidades
+                        // Dados da rede
                         const dados = [
                             ["Sítio 7 irmãos", "APRAS", "Comunidade Café torrado"],
                             ["Sítio Campo Verde", "STTR", "Comunidade Café torrado"],
@@ -284,106 +390,218 @@ network_html = """
                             ["Sítio Baixa da Serra", "ACOGLEC", "Castanhal"],
                             ["Sítio Bom Viver", "ACOGLEC", "Castanhal"],
                             ["Sítio São Raimundo 2", "ACOGLEC", "Castanhal"],
+                            ["Nova Vida", "ACOJUV", "Comunidade Pau Darco"],
                             ["Sítio Santa Rosa", "Sindicato do trabalhador", "Comunidade Pau Darco"],
-                            ["Sítio só Um", "Acojuv", "Comunidade Pau Darco"],
-                            ["Sítio Arara azul", "Acojuv", "Comunidade Pau Darco"],
-                            ["Sítio Fé em Deus", "Conjuv", "Comunidade Pau Darco"],
-                            ["Sítio Boa Esperança", "Conjuv", "Comunidade Pau Darco"]
+                            ["Sítio só Um", "ACOJUV", "Comunidade Pau Darco"],
+                            ["Sítio Arara azul", "ACOJUV", "Comunidade Pau Darco"],
+                            ["Sítio Fé em Deus", "CONJUV", "Comunidade Pau Darco"],
+                            ["Sítio Boa Esperança", "CONJUV", "Comunidade Pau Darco"]
                         ];
 
-                        const comunidadeMap = {};
+                        // Cores para as organizações
                         const orgColors = {
                             "APRAS": "#d2b48c",
                             "STTR": "#cd853f",
                             "ACORJUVE": "#8b4513",
                             "ACOGLEC": "#a0522d",
                             "ACOJUV": "#d2691e",
-                            "ACOJUV": "#d2691e",
                             "SINDICATO DO TRABALHADOR": "#bc8f8f",
                             "CONJUV": "#f4a460",
-                            "ACT": "#daa520",
                             "N.A.": "#808080"
                         };
 
-                        // Coordenadas base por comunidade
-                        const comunidadeOffset = {
-                            "Comunidade Café torrado": [-100, 10],
-                            "Comunidade Maravilha": [100, 10],
-                            "Castanhal": [10, -100],
-                            "Comunidade Pau Darco": [10, 100]
-                        };
+                        // Configurações do gráfico
+                        const width = document.getElementById('graph-container').clientWidth;
+                        const height = document.getElementById('graph-container').clientHeight;
 
-                        dados.forEach(([prop, org, comunidade]) => {
-                            const idProp = prop.toUpperCase().trim();
-                            const idOrg = org.toUpperCase().trim();
+                        // Cria o SVG
+                        const svg = d3.select("#graph-container")
+                            .append("svg")
+                            .attr("width", width)
+                            .attr("height", height);
 
-                            comunidadeMap[idProp] = comunidade;
+                        // Elemento para tooltip
+                        const tooltip = d3.select(".tooltip");
 
-                            const [baseX, baseY] = comunidadeOffset[comunidade] || [0, 0];
-                            const jitterX = Math.random() * 100 - 50;
-                            const jitterY = Math.random() * 100 - 50;
+                        // Cria o gráfico inicial
+                        createGraph("Todos");
 
-                            // Adiciona o nó da propriedade
-                            if (!graph.hasNode(idProp)) {
-                                graph.addNode(idProp, {
-                                    label: prop,
-                                    size: 7,
-                                    x: baseX + jitterX,
-                                    y: baseY + jitterY,
-                                    color: "#5d4a36"
-                                });
-                            }
+                        // Função para criar o gráfico com base na comunidade selecionada
+                        function createGraph(selectedComunidade) {
+                            // Limpa o SVG
+                            svg.selectAll("*").remove();
 
-                            // Adiciona o nó da organização
-                            if (!graph.hasNode(idOrg)) {
-                                graph.addNode(idOrg, {
-                                    label: org,
-                                    size: 15,
-                                    x: baseX + jitterX / 12,
-                                    y: baseY + jitterY / 2,
-                                    color: orgColors[idOrg] || "#696969"
-                                });
-                            }
+                            // Inicializa os arrays para nós e links
+                            const nodes = [];
+                            const links = [];
 
-                            // Propriedade → Organização
-                            if (!graph.hasEdge(idProp, idOrg)) {
-                                graph.addEdge(idProp, idOrg, { size: 2, color: "#aaa" });
-                            }
+                            // Adiciona o nó central
+                            nodes.push({
+                                id: "MANIVA TAPAJÓS",
+                                label: "MANIVA TAPAJÓS",
+                                size: 30,
+                                color: "#a52a2a",
+                                type: "central",
+                                comunidade: "Todos"
+                            });
 
-                            // Propriedade → MANIVA
-                            if (!graph.hasEdge(idProp, "MANIVA TAPAJÓS")) {
-                                graph.addEdge(idProp, "MANIVA TAPAJÓS", { size: 1, color: "#00db92" });
-                            }
+                            // Processa os dados e adiciona os nós e links
+                            dados.forEach(([prop, org, comunidade]) => {
+                                const idProp = prop.toUpperCase().trim();
+                                const idOrg = org.toUpperCase().trim();
 
-                            // Organização → MANIVA
-                            if (!graph.hasEdge(idOrg, "MANIVA TAPAJÓS")) {
-                                graph.addEdge(idOrg, "MANIVA TAPAJÓS", { size: 3, color: "#ccc" });
-                            }
-                        });
-
-                        // Renderiza com Sigma.js
-                        const renderer = new Sigma(graph, container);
-
-                        // Filtro por comunidade
-                        const select = document.getElementById("comunidade-select");
-                        select.addEventListener("change", () => {
-                            const value = select.value;
-
-                            graph.forEachNode((node) => {
-                                if (node === "MANIVA TAPAJÓS" || !comunidadeMap[node]) {
-                                    graph.setNodeAttribute(node, "hidden", false);
+                                // Verifica se deve incluir este nó baseado no filtro
+                                if (selectedComunidade !== "Todos" && comunidade !== selectedComunidade) {
                                     return;
                                 }
 
-                                const comunidade = comunidadeMap[node];
-                                const visible = value === "Todos" || comunidade === value;
-                                graph.setNodeAttribute(node, "hidden", !visible);
+                                // Adiciona o nó da propriedade
+                                if (!nodes.find(n => n.id === idProp)) {
+                                    nodes.push({
+                                        id: idProp,
+                                        label: prop,
+                                        size: 7,
+                                        color: "#5d4a36",
+                                        type: "propriedade",
+                                        comunidade: comunidade
+                                    });
+                                }
+
+                                // Adiciona o nó da organização
+                                if (!nodes.find(n => n.id === idOrg)) {
+                                    nodes.push({
+                                        id: idOrg,
+                                        label: org,
+                                        size: 15,
+                                        color: orgColors[idOrg] || "#696969",
+                                        type: "organizacao",
+                                        comunidade: comunidade
+                                    });
+                                }
+
+                                // Adiciona os links
+                                links.push({
+                                    source: idProp,
+                                    target: idOrg,
+                                    size: 2,
+                                    color: "#aaa"
+                                });
+
+                                links.push({
+                                    source: idProp,
+                                    target: "MANIVA TAPAJÓS",
+                                    size: 1,
+                                    color: "#00db92"
+                                });
+
+                                links.push({
+                                    source: idOrg,
+                                    target: "MANIVA TAPAJÓS",
+                                    size: 3,
+                                    color: "#ccc"
+                                });
                             });
 
-                            graph.forEachEdge((edge, _, source, target) => {
-                                const visible = !graph.getNodeAttribute(source, "hidden") && !graph.getNodeAttribute(target, "hidden");
-                                graph.setEdgeAttribute(edge, "hidden", !visible);
+                            // Cria a simulação de força
+                            const simulation = d3.forceSimulation(nodes)
+                                .force("link", d3.forceLink(links).id(d => d.id).distance(150))
+                                .force("charge", d3.forceManyBody().strength(-300))
+                                .force("center", d3.forceCenter(width / 2, height / 2))
+                                .force("collide", d3.forceCollide().radius(d => d.size + 5));
+
+                            // Desenha os links
+                            const link = svg.append("g")
+                                .attr("stroke", "#999")
+                                .attr("stroke-opacity", 0.6)
+                                .selectAll("line")
+                                .data(links)
+                                .join("line")
+                                .attr("stroke-width", d => d.size)
+                                .attr("stroke", d => d.color);
+
+                            // Desenha os nós
+                            const node = svg.append("g")
+                                .attr("stroke", "#fff")
+                                .attr("stroke-width", 1.5)
+                                .selectAll("circle")
+                                .data(nodes)
+                                .join("circle")
+                                .attr("r", d => d.size)
+                                .attr("fill", d => d.color)
+                                .attr("class", "node")
+                                .call(d3.drag()
+                                    .on("start", dragstarted)
+                                    .on("drag", dragged)
+                                    .on("end", dragended))
+                                .on("mouseover", function (event, d) {
+                                    // Aumenta o nó
+                                    d3.select(this).attr("r", d.size * 1.5);
+
+                                    // Mostra tooltip
+                                    tooltip.style("opacity", 1)
+                                        .html(`<strong>${d.label}</strong><br>${d.type === "propriedade" ? "Propriedade" : d.type === "organizacao" ? "Organização" : "Central"}<br>Comunidade: ${d.comunidade}`)
+                                        .style("left", (event.pageX + 10) + "px")
+                                        .style("top", (event.pageY - 28) + "px");
+                                })
+                                .on("mouseout", function (event, d) {
+                                    // Retorna ao tamanho original
+                                    d3.select(this).attr("r", d.size);
+
+                                    // Esconde tooltip
+                                    tooltip.style("opacity", 0);
+                                });
+
+                            // Adiciona rótulos
+                            const label = svg.append("g")
+                                .attr("class", "labels")
+                                .selectAll("text")
+                                .data(nodes)
+                                .join("text")
+                                .attr("class", "label")
+                                .text(d => d.label)
+                                .attr("font-size", d => d.type === "central" ? 14 : 10)
+                                .attr("dx", d => d.type === "central" ? 20 : 12)
+                                .attr("dy", ".35em");
+
+                            // Atualiza a posição dos elementos a cada tick da simulação
+                            simulation.on("tick", () => {
+                                link
+                                    .attr("x1", d => d.source.x)
+                                    .attr("y1", d => d.source.y)
+                                    .attr("x2", d => d.target.x)
+                                    .attr("y2", d => d.target.y);
+
+                                node
+                                    .attr("cx", d => d.x)
+                                    .attr("cy", d => d.y);
+
+                                label
+                                    .attr("x", d => d.x)
+                                    .attr("y", d => d.y);
                             });
+
+                            // Funções para arrastar os nós
+                            function dragstarted(event, d) {
+                                if (!event.active) simulation.alphaTarget(0.3).restart();
+                                d.fx = d.x;
+                                d.fy = d.y;
+                            }
+
+                            function dragged(event, d) {
+                                d.fx = event.x;
+                                d.fy = event.y;
+                            }
+
+                            function dragended(event, d) {
+                                if (!event.active) simulation.alphaTarget(0);
+                                d.fx = null;
+                                d.fy = null;
+                            }
+                        }
+
+                        // Adiciona o evento de mudança no seletor de comunidade
+                        document.getElementById("comunidade-select").addEventListener("change", function () {
+                            createGraph(this.value);
                         });
                     </script>
                 </body>
