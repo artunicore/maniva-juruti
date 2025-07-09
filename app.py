@@ -611,9 +611,57 @@ network_html = """
 
 components.html(network_html, height=700, scrolling=True)
 
-# Legenda
-
 st.title('Navegue Pelos Dados')
+
+st.markdown("""
+<style>
+    /* Container principal das abas - espaço entre elas */
+    div[data-baseweb="tab-list"] {
+        gap: 1rem !important;
+        justify-content: space-between !important;
+    }
+    
+    /* Abas individuais - tamanho aumentado e destaque */
+    button[data-baseweb="tab"] {
+        font-size: 1.2rem !important;
+        padding: 1rem 1.5rem !important;
+        border-radius: 20px !important;
+        transition: all 0.3s ease !important;
+        flex: 1 !important;
+        text-align: center !important;
+        border: 1px solid #5D4037 !important;
+        background-color: #b9d306 !important;
+    }
+    
+    /* Efeito hover - destaque ao passar o mouse */
+    button[data-baseweb="tab"]:hover {
+        background-color: #5D4037 !important;
+        transform: translateY(-1px) scale(0.9);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    /* Aba selecionada - destaque máximo */
+    button[data-baseweb="tab"][aria-selected="true"] {
+        background-color: #a0522d !important;
+        color: white !important;
+        font-weight: bold !important;
+        box-shadow: 0 4px 12px rgba(93, 64, 55, 0.4);
+        border: none !important;
+    }
+    
+    /* Ícones dentro das abas */
+    .stTabs [data-testid="stMarkdownContainer"] svg {
+        width: 24px !important;
+        height: 24px !important;
+        vertical-align: middle !important;
+        margin-right: 8px !important;
+    }
+    
+    .stTabs [data-testid="stMarkdownContainer"] p {
+        font-size: 1.3rem;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Abas para diferentes seções
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
