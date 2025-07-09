@@ -564,7 +564,7 @@ network_html = """
                                 .attr("dx", d => d.type === "central" ? 20 : 12)
                                 .attr("dy", ".35em");
 
-                            // Atualiza a posição dos elementos a cada tick da simulação
+                            
                             simulation.on("tick", () => {
                                 link
                                     .attr("x1", d => d.source.x)
@@ -581,7 +581,7 @@ network_html = """
                                     .attr("y", d => d.y);
                             });
 
-                            // Funções para arrastar os nós
+                            
                             function dragstarted(event, d) {
                                 if (!event.active) simulation.alphaTarget(0.3).restart();
                                 d.fx = d.x;
@@ -1073,7 +1073,7 @@ with tab4:
     else:
         st.warning("Dados de dificuldades no processamento não disponíveis")
     if 'Se sim, quais pragas?' in filtered_df:
-        pragas = filtered_df['Se sim, quais pragas?'].str.replace(', ',',').str.split(',').explode().str.strip().value_counts()
+        pragas = filtered_df['Se sim, quais pragas?'].str.replace(', ',',').str.replace(' E ',',').str.replace('LARGATA','LAGARTA').str.upper().str.split(',').explode().str.strip().value_counts()
         fig = px.bar(
             pragas,
             title='Incidência de Pragas',
