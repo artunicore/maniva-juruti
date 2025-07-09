@@ -704,7 +704,7 @@ with tab2:
             y='Area_Macaxeira_ha',
             size='Area_Total_ha',
             color='Comunidade',
-            hover_name='Nome produtor (entrevistado)',
+            hover_name='Nome da propriedade',
             title='Relação entre Área de Mandioca e Macaxeira',
             labels={
                 'Area_Mandioca_ha': 'Área de Mandioca (ha)',
