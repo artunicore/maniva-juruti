@@ -14,7 +14,6 @@ st.set_page_config(
     page_title="Dashboard de Produção de Mandioca - Juruti",
     page_icon="🌱",
     layout="wide",
-
 )
 
 # Carregar dados
@@ -621,6 +620,9 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "⚠️ Desafios", "📊 Dados Completos"
 ])
 
+
+
+
 with tab1:
     st.subheader("Perfil dos Produtores")
     
@@ -684,8 +686,12 @@ with tab1:
         else:
             st.warning("Dados de associação não disponíveis")
 
+
+
+
 with tab2:
     st.subheader("Práticas de Cultivo")
+    
     
     # Bubble Chart - Relação entre área de mandioca e macaxeira
     if 'Area_Mandioca_ha' in filtered_df.columns and 'Area_Macaxeira_ha' in filtered_df.columns:
@@ -708,9 +714,140 @@ with tab2:
             size_max=50
         )
         st.plotly_chart(fig, use_container_width=True)
+        
     else:
-        st.warning("Dados de área plantada específica não disponíveis")
+        st.warning("Dados de área plantada específica não disponíveis") 
     
+    
+    
+    
+    #RANK
+    container_rank = st.container(height=600)
+    with container_rank:
+        # Cálculo da área total
+        filtered_df['Area_Total_ha'] = filtered_df['Area_Mandioca_ha'] + filtered_df['Area_Macaxeira_ha']
+        
+        st.header('Rank dos Sítios por Área Plantada')
+        
+        # Dropdown para seleção do tipo de ranking
+        ranking_option = st.selectbox(
+            'Selecione o ranking:',
+            options=['Top 5', 'Top 10', 'Todos'],
+            index=0
+        )
+        
+        # Ordena o DataFrame
+        sorted_df = filtered_df.sort_values(by='Area_Total_ha', ascending=False)
+        
+        # Aplica o filtro
+        if ranking_option == 'Top 5':
+            ranked_df = sorted_df.head(5)
+        elif ranking_option == 'Top 10':
+            ranked_df = sorted_df.head(10)
+        else:
+            ranked_df = sorted_df
+        
+        # CSS para estilização
+        st.markdown("""
+        <style>
+            .gold {
+                background-color: #FFD700 !important;
+                color: #000;
+                font-weight: bold;
+                border-radius: 8px;
+                padding: 10px;
+                margin: 5px 0;
+            }
+            .silver {
+                background-color: #C0C0C0 !important;
+                color: #000;
+                font-weight: bold;
+                border-radius: 8px;
+                padding: 10px;
+                margin: 5px 0;
+            }
+            .bronze {
+                background-color: #CD7F32 !important;
+                color: #000;
+                font-weight: bold;
+                border-radius: 8px;
+                padding: 10px;
+                margin: 5px 0;
+            }
+            .normal {
+                background-color: #f0f2f6;
+                border-radius: 8px;
+                padding: 10px;
+                margin: 5px 0;
+            }
+            .rank-header {
+                font-weight: bold;
+                margin-bottom: 10px;
+            }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # Cria colunas
+        col_propriedades, col_area, col_comunidade = st.columns(3)
+        
+        with col_propriedades:
+            st.markdown('<p class="rank-header">Propriedade</p>', unsafe_allow_html=True)
+            for i, (_, row) in enumerate(ranked_df.iterrows(), start=1):
+                css_class = "gold" if i == 1 else "silver" if i == 2 else "bronze" if i == 3 else "normal"
+                st.markdown(f'<div class="{css_class}">{i}º - {row["Nome da propriedade"]}</div>', unsafe_allow_html=True)
+                
+        with col_area:
+            st.markdown('<p class="rank-header">Área Total (ha)</p>', unsafe_allow_html=True)
+            for i, (_, row) in enumerate(ranked_df.iterrows(), start=1):
+                css_class = "gold" if i == 1 else "silver" if i == 2 else "bronze" if i == 3 else "normal"
+                st.markdown(f'<div class="{css_class}">{row["Area_Total_ha"]:.2f}</div>', unsafe_allow_html=True)
+        
+        with col_comunidade:
+            st.markdown('<p class="rank-header">Comunidade</p>', unsafe_allow_html=True)
+            for i, (_, row) in enumerate(ranked_df.iterrows(), start=1):
+                css_class = "gold" if i == 1 else "silver" if i == 2 else "bronze" if i == 3 else "normal"
+                st.markdown(f'<div class="{css_class}">{i}º - {row["Comunidade"]}</div>', unsafe_allow_html=True)
+            
+        
+        
+
+    #MEDIAS
+    st.subheader('Média das Áreas')
+    col_media_mandioca,col_media_macaxeira,col_total_media = st.columns(3)
+    with col_media_macaxeira:
+        if 'Area_Macaxeira_ha' in filtered_df.columns:
+            # Criar coluna de área total para o tamanho das bolhas
+            media_macaxeira = filtered_df['Area_Macaxeira_ha']
+            media_formatada_macaxeira = f'{media_macaxeira.mean():.3f}'
+            st.metric('Média total de Área Plantada de Macaxeira', media_formatada_macaxeira)
+            
+        else:
+            st.warning("Dados de área plantada específica não disponíveis")
+            
+    
+    with col_media_mandioca:
+        if 'Area_Mandioca_ha' in filtered_df.columns:
+            # Criar coluna de área total para o tamanho das bolhas
+            media_mandioca = filtered_df['Area_Mandioca_ha']
+            media_formatada_mandioca = f'{media_mandioca.mean():.3f}'
+            st.metric('Média total de Área Plantada de Mandioca', media_formatada_mandioca)
+            
+        else:
+            st.warning("Dados de área plantada específica não disponíveis")
+    with col_total_media:
+        if 'Area_Mandioca_ha' in filtered_df.columns and 'Area_Macaxeira_ha' in filtered_df.columns:
+            # Criar coluna de área total para o tamanho das bolhas
+            filtered_df['Area_Total_ha'] = filtered_df['Area_Mandioca_ha'] + filtered_df['Area_Macaxeira_ha']
+            totaldf =filtered_df['Area_Total_ha']
+            total_media_formata = totaldf.mean()
+            media_formatada_total = f'{total_media_formata.mean():.3f}'
+            st.metric('Média total de Área Plantada', media_formatada_total)
+            
+            
+        else:
+            st.warning("Dados de área plantada específica não disponíveis")
+    
+    st.subheader("Variedades")
     col1, col2 = st.columns(2, gap="large")
     
     with col1:
@@ -744,6 +881,9 @@ with tab2:
                 st.warning("Erro ao processar variedades de macaxeira")
         else:
             st.warning("Dados de variedades de macaxeira não disponíveis")
+    
+    
+    
     
     
 with tab3:
@@ -810,6 +950,9 @@ with tab3:
         else:
             st.warning("Dados de dificuldades na comercialização não disponíveis")
 
+
+
+
 with tab4:
     st.subheader("Dificuldades no Cultivo")
     
@@ -858,6 +1001,9 @@ with tab4:
                 st.warning("Erro ao processar dificuldades no processamento")
     else:
             st.warning("Dados de dificuldades no processamento não disponíveis")
+
+
+
 
 with tab5:
     
