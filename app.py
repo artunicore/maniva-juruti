@@ -69,9 +69,9 @@ def preprocess_data(df):
     if 'Renda_Familiar' in df.columns:
         renda_map = {
             'MENOR QUE UM SALÁRIO MÍNIMO': 1000,
-            '1 SALÁRIO MÍNIMO': 1300,
-            '1 A 2 SALÁRIOS MÍNIMOS': 2500,
-            '2 A 3 SALÁRIOS MÍNIMOS': 4000
+            '1 SALÁRIO MÍNIMO': 1630,
+            '1 A 2 SALÁRIOS MÍNIMOS': 3260,
+            '2 A 3 SALÁRIOS MÍNIMOS': 4890
         }
         df['Renda_Familiar_R$'] = df['Renda_Familiar'].map(renda_map)
         df['Renda_Familiar_R$'] = pd.to_numeric(df['Renda_Familiar_R$'], errors='coerce')
@@ -93,6 +93,7 @@ comunidades = st.sidebar.multiselect(
 
 idade_min = int(df['Idade'].min()) if 'Idade' in df.columns and not df['Idade'].isnull().all() else 18
 idade_max = int(df['Idade'].max()) if 'Idade' in df.columns and not df['Idade'].isnull().all() else 100
+
 idade_range = st.sidebar.slider(
     "Faixa etária:",
     min_value=idade_min,
@@ -611,7 +612,6 @@ network_html = """
 
 components.html(network_html, height=700, scrolling=True)
 
-st.markdown('---')
 st.title('Navegue Pelos Dados')
 
 st.markdown("""
@@ -849,8 +849,10 @@ with tab2:
                 border-radius: 8px;
                 padding: 10px;
                 margin: 5px 0;
+                color: #000
             }
             .rank-header {
+
                 font-weight: bold;
                 margin-bottom: 10px;
             }
@@ -1070,7 +1072,14 @@ with tab4:
             st.warning("Erro ao processar dificuldades no processamento")
     else:
         st.warning("Dados de dificuldades no processamento não disponíveis")
-
+    if 'Se sim, quais pragas?' in filtered_df:
+        pragas = filtered_df['Se sim, quais pragas?'].str.replace(', ',',').str.split(',').explode().str.strip().value_counts()
+        fig = px.bar(
+            pragas,
+            title='Incidência de Pragas',
+            labels={'index': 'Praga', 'value': 'Contagem'},
+            color_discrete_sequence=TERRACOTA_PALETTE)
+        st.plotly_chart(fig,use_container_width=True)
 with tab5:
     
     start_col = 1  # Skip first column (index 0)
