@@ -661,6 +661,13 @@ st.markdown("""
         font-size: 1.3rem;
         font-weight: bold;
     }
+    
+    .stTabs [data-baseweb="tab-border"]{
+        visibility: hidden
+    }
+    .stTabs [data-baseweb="tab-highlight"]{
+        visibility: hidden
+    }
 </style>
 """, unsafe_allow_html=True)
 
