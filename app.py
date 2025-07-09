@@ -623,18 +623,34 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 
 
 
+# Defina uma paleta de cores terrosa no início do seu script
+TERRACOTA_PALETTE = [
+    "#A52A2A",
+    "#667755",
+    "#8D6E63",  # Marrom terroso
+    "#A1887F",  # Marrom claro
+    "#CCCCAA",  # Bege
+    "#5D4037",  # Marrom escuro
+    "#795548",  # Marrom chocolate
+    "#BCAAA4",  # Rosa terroso
+    "#4E342E",  # Marrom quase preto
+    "#3E2723",  # Terracota escuro
+    "#6D4C41",  # Terracota
+]
+
+# ... (código anterior)
+
 with tab1:
     st.subheader("Perfil dos Produtores")
-    
     
     if 'Possui Cadastro Ambiental Rural (CAR)?' in filtered_df.columns:
         car_count = filtered_df['Possui Cadastro Ambiental Rural (CAR)?'].value_counts()
         fig = px.bar(car_count,
                      title="Registro de CAR Entre os Produtores",
                      labels={'index': 'Registro de CAR', 'value':'Contagem'},
-                     orientation='h'
+                     orientation='h',
+                     color_discrete_sequence=TERRACOTA_PALETTE  # Nova cor
                      )
-        
         st.plotly_chart(fig, use_container_width=True)
     
     col1, col2 = st.columns(2)
@@ -643,7 +659,8 @@ with tab1:
             fig = px.pie(
                 filtered_df, 
                 names='Sexo',
-                title='Distribuição por Gênero'
+                title='Distribuição por Gênero',
+                color_discrete_sequence=TERRACOTA_PALETTE  # Nova cor
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -656,7 +673,7 @@ with tab1:
                 title='Nível de Escolaridade',
                 labels={'index': 'Escolaridade', 'value': 'Contagem'},
                 orientation='h',
-                
+                color_discrete_sequence=[TERRACOTA_PALETTE[0]]  # Cor principal
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -669,7 +686,8 @@ with tab1:
                 x='Idade',
                 nbins=10,
                 title='Distribuição Etária',
-                color='Sexo' if 'Sexo' in filtered_df.columns else None
+                color='Sexo' if 'Sexo' in filtered_df.columns else None,
+                color_discrete_sequence=TERRACOTA_PALETTE  # Nova cor
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -680,22 +698,18 @@ with tab1:
             fig = px.pie(
                 associacao_counts,
                 names=associacao_counts.index,
-                title='Associação a Entidades'
+                title='Associação a Entidades',
+                color_discrete_sequence=TERRACOTA_PALETTE  # Nova cor
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("Dados de associação não disponíveis")
 
-
-
-
 with tab2:
     st.subheader("Práticas de Cultivo")
     
-    
-    # Bubble Chart - Relação entre área de mandioca e macaxeira
+    # Bubble Chart
     if 'Area_Mandioca_ha' in filtered_df.columns and 'Area_Macaxeira_ha' in filtered_df.columns:
-        # Criar coluna de área total para o tamanho das bolhas
         filtered_df['Area_Total_ha'] = filtered_df['Area_Mandioca_ha'] + filtered_df['Area_Macaxeira_ha']
         
         fig = px.scatter(
@@ -711,17 +725,15 @@ with tab2:
                 'Area_Macaxeira_ha': 'Área de Macaxeira (ha)',
                 'Area_Total_ha': 'Área Total (ha)'
             },
-            size_max=50
+            size_max=50,
+            color_discrete_sequence=TERRACOTA_PALETTE  # Nova cor
         )
         st.plotly_chart(fig, use_container_width=True)
         
     else:
         st.warning("Dados de área plantada específica não disponíveis") 
     
-    
-    
-    
-    #RANK
+    # RANK (mantido igual ao anterior com cores dourado/prata/bronze)
     container_rank = st.container(height=600)
     with container_rank:
         # Cálculo da área total
@@ -809,9 +821,8 @@ with tab2:
                 st.markdown(f'<div class="{css_class}">{i}º - {row["Comunidade"]}</div>', unsafe_allow_html=True)
             
         
-        
 
-    #MEDIAS
+    # MEDIAS
     st.subheader('Média das Áreas')
     col_media_mandioca,col_media_macaxeira,col_total_media = st.columns(3)
     with col_media_macaxeira:
@@ -847,18 +858,20 @@ with tab2:
         else:
             st.warning("Dados de área plantada específica não disponíveis")
     
+
+    
     st.subheader("Variedades")
     col1, col2 = st.columns(2, gap="large")
     
     with col1:
-        # Variedades de mandioca
         if 'Variedades_Mandioca' in filtered_df.columns:
             try:
                 mandioca_variedades = filtered_df['Variedades_Mandioca'].str.split(',', expand=True).stack().value_counts()
                 fig = px.bar(
                     mandioca_variedades.head(10),
                     title='Variedades de Mandioca Mais Cultivadas',
-                    labels={'index': 'Variedade', 'value': 'Contagem'}
+                    labels={'index': 'Variedade', 'value': 'Contagem'},
+                    color_discrete_sequence=[TERRACOTA_PALETTE[3]]  # Nova cor
                 )
                 st.plotly_chart(fig, use_container_width=True)
             except:
@@ -867,25 +880,21 @@ with tab2:
             st.warning("Dados de variedades de mandioca não disponíveis")
             
     with col2:
-        # Variedades de macaxeira
         if 'Qual(s) variedade(s) de MACAXEIRA?' in filtered_df.columns:
             try:
                 macaxeira_variedades = filtered_df['Qual(s) variedade(s) de MACAXEIRA?'].str.split(',', expand=True).stack().value_counts()
                 fig = px.bar(
                     macaxeira_variedades.head(10),
                     title='Variedades de Macaxeira Mais Cultivadas',
-                    labels={'index': 'Variedade', 'value': 'Contagem'}
+                    labels={'index': 'Variedade', 'value': 'Contagem'},
+                    color_discrete_sequence=[TERRACOTA_PALETTE[0]]  # Nova cor
                 )
                 st.plotly_chart(fig, use_container_width=True)
             except:
                 st.warning("Erro ao processar variedades de macaxeira")
         else:
             st.warning("Dados de variedades de macaxeira não disponíveis")
-    
-    
-    
-    
-    
+
 with tab3:
     st.subheader("Comercialização e Processamento")
     
@@ -898,7 +907,8 @@ with tab3:
                 fig = px.bar(
                     produtos,
                     title='Produtos Derivados Comercializados',
-                    labels={'index': 'Produto', 'value': 'Contagem'}
+                    labels={'index': 'Produto', 'value': 'Contagem'},
+                    color_discrete_sequence=TERRACOTA_PALETTE  # Nova cor
                 )
                 st.plotly_chart(fig, use_container_width=True)
             except:
@@ -909,7 +919,14 @@ with tab3:
         st.subheader("Principais Compradores")
         if 'Com quem comercializa os produtos ?' in filtered_df.columns and not filtered_df['Com quem comercializa os produtos ?'].dropna().empty:
             compradores = filtered_df['Com quem comercializa os produtos ?'].dropna().str.split(',').explode().str.strip().str.title().value_counts()
-            fig_compradores = px.pie(compradores, names=compradores.index, values=compradores.values, title="Para Quem os Produtores Vendem?", hole=0.4)
+            fig_compradores = px.pie(
+                compradores, 
+                names=compradores.index, 
+                values=compradores.values, 
+                title="Para Quem os Produtores Vendem?", 
+                hole=0.4,
+                color_discrete_sequence=TERRACOTA_PALETTE  # Nova cor
+            )
             st.plotly_chart(fig_compradores, use_container_width=True)
         else:
             st.warning("Dados de locais de comercialização não disponíveis")
@@ -917,7 +934,6 @@ with tab3:
     with col2:
         if 'Preco_Farinha' in filtered_df.columns:
             try:
-                # Converter para numérico e remover não numéricos
                 precos = filtered_df['Preco_Farinha'].apply(lambda x: pd.to_numeric(str(x).replace(',', '.'), errors='coerce'))
                 precos = precos.dropna()
                 
@@ -925,7 +941,8 @@ with tab3:
                     fig = px.histogram(
                         precos,
                         title='Distribuição de Preços da Farinha (R$/kg)',
-                        labels={'value': 'Preço (R$/kg)'}
+                        labels={'value': 'Preço (R$/kg)'},
+                        color_discrete_sequence=[TERRACOTA_PALETTE[4]]  # Nova cor
                     )
                     st.plotly_chart(fig, use_container_width=True)
                 else:
@@ -942,7 +959,8 @@ with tab3:
                 fig = px.bar(
                     dificuldades,
                     title='Dificuldades na Comercialização',
-                    labels={'index': 'Dificuldade', 'value': 'Contagem'}
+                    labels={'index': 'Dificuldade', 'value': 'Contagem'},
+                    color_discrete_sequence=[TERRACOTA_PALETTE[2]]  # Nova cor
                 )
                 st.plotly_chart(fig, use_container_width=True)
             except:
@@ -950,20 +968,17 @@ with tab3:
         else:
             st.warning("Dados de dificuldades na comercialização não disponíveis")
 
-
-
-
 with tab4:
     st.subheader("Dificuldades no Cultivo")
     
-    # Dificuldades no cultivo
     if 'Dificuldades_Cultivo' in filtered_df.columns:
         try:
             cultivo_dificuldades = filtered_df['Dificuldades_Cultivo'].str.split(',', expand=True).stack().value_counts()
             fig = px.bar(
                 cultivo_dificuldades,
                 title='Dificuldades no Cultivo',
-                labels={'index': 'Dificuldade', 'value': 'Contagem'}
+                labels={'index': 'Dificuldade', 'value': 'Contagem'},
+                color_discrete_sequence=[TERRACOTA_PALETTE[1]]  # Nova cor
             )
             st.plotly_chart(fig, use_container_width=True)
         except:
@@ -971,39 +986,32 @@ with tab4:
     else:
         st.warning("Dados de dificuldades no cultivo não disponíveis")
     
-
-    
-
-        # Assistência Técnica
     if 'Assistencia_Tecnica' in filtered_df.columns:
-            assistencia = filtered_df['Assistencia_Tecnica'].value_counts()
-            fig = px.pie(
-                assistencia,
-                names=assistencia.index,
-                title='Acesso à Assistência Técnica'
+        assistencia = filtered_df['Assistencia_Tecnica'].value_counts()
+        fig = px.pie(
+            assistencia,
+            names=assistencia.index,
+            title='Acesso à Assistência Técnica',
+            color_discrete_sequence=TERRACOTA_PALETTE  # Nova cor
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning("Dados de assistência técnica não disponíveis")
+    
+    if 'Dificuldades_Processamento' in filtered_df.columns:
+        try:
+            processamento_dificuldades = filtered_df['Dificuldades_Processamento'].str.split(',', expand=True).stack().value_counts()
+            fig = px.bar(
+                processamento_dificuldades,
+                title='Dificuldades no Processamento',
+                labels={'index': 'Dificuldade', 'value': 'Contagem'},
+                color_discrete_sequence=[TERRACOTA_PALETTE[5]]  # Nova cor
             )
             st.plotly_chart(fig, use_container_width=True)
+        except:
+            st.warning("Erro ao processar dificuldades no processamento")
     else:
-            st.warning("Dados de assistência técnica não disponíveis")
-    
-
-        # Dificuldades no processamento
-    if 'Dificuldades_Processamento' in filtered_df.columns:
-            try:
-                processamento_dificuldades = filtered_df['Dificuldades_Processamento'].str.split(',', expand=True).stack().value_counts()
-                fig = px.bar(
-                    processamento_dificuldades,
-                    title='Dificuldades no Processamento',
-                    labels={'index': 'Dificuldade', 'value': 'Contagem'}
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            except:
-                st.warning("Erro ao processar dificuldades no processamento")
-    else:
-            st.warning("Dados de dificuldades no processamento não disponíveis")
-
-
-
+        st.warning("Dados de dificuldades no processamento não disponíveis")
 
 with tab5:
     
