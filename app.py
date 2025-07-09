@@ -613,6 +613,7 @@ components.html(network_html, height=700, scrolling=True)
 
 # Legenda
 
+st.title('Navegue Pelos Dados')
 
 # Abas para diferentes seções
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
