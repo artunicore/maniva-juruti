@@ -611,6 +611,7 @@ network_html = """
 
 components.html(network_html, height=700, scrolling=True)
 
+st.markdown('---')
 st.title('Navegue Pelos Dados')
 
 st.markdown("""
