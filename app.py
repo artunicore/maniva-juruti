@@ -659,6 +659,7 @@ st.markdown("""
     
     .stTabs [data-testid="stMarkdownContainer"] p {
         font-size: 1.3rem;
+        font-weight: bold;
     }
 </style>
 """, unsafe_allow_html=True)
