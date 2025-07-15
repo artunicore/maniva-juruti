@@ -1,4 +1,13 @@
 streamlit
 pandas
-plotly.express
-matplotlib
+plotly
+numpy
+transformers
+langchain-community
+langchain-core
+langchain
+langchain-deepseek
+faiss-cpu
+sentence-transformers
+huggingface-hub
+torch

@@ -7,13 +7,6 @@ import numpy as np
 import streamlit.components.v1 as components
 
 from transformers import pipeline
-import os
-import re
-import requests
-
-import time
-import requests
-from requests.exceptions import Timeout, ConnectionError, RequestException
 
 # Importações corrigidas para LangChain e DeepSeek
 from langchain_community.vectorstores import FAISS
@@ -22,9 +15,6 @@ from langchain.prompts import PromptTemplate
 from langchain_community.embeddings import HuggingFaceEmbeddings # Usado para embeddings
 from langchain_deepseek import ChatDeepSeek # Usar ChatDeepSeek para o LLM
 
-
-import re
-from collections import Counter
 # Configuração inicial
 st.set_page_config(
     page_title="Dashboard de Produção de Mandioca - Juruti",
