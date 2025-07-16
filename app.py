@@ -15,6 +15,10 @@ from langchain.prompts import PromptTemplate
 from langchain_community.embeddings import HuggingFaceEmbeddings # Usado para embeddings
 from langchain_deepseek import ChatDeepSeek # Usar ChatDeepSeek para o LLM
 
+
+
+import re
+from collections import Counter
 # Configuração inicial
 st.set_page_config(
     page_title="Dashboard de Produção de Mandioca - Juruti",
@@ -148,17 +152,17 @@ def generate_comprehensive_context(df):
 
 @st.cache_resource
 def setup_rag_system(df, api_key):
-    # Gerar contexto
+    # Gerar contexto(transformar o dataframe em string)
     local_context = generate_comprehensive_context(df)
     
-    # Configuração do embeddings
+    # Configuração do embeddings, para entender as relações entre palavras e contextos
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     
     # Criar banco vetorial
     vector_db = FAISS.from_texts([local_context], embeddings)
     retriever = vector_db.as_retriever(search_kwargs={"k": 1})
     
-    # Configurar prompt template
+    # Configurar as instruções para geração de respostas
     template = """
     Você é um especialista no Projeto Maniva Tapajós em Juruti, Pará.
     Sua função é responder perguntas com base EXCLUSIVAMENTE nos dados fornecidos no contexto.
@@ -214,75 +218,7 @@ def consultar_rag_sistema(qa_chain, query, df):
             "source": "Sistema"
         }
 
-def generate_plot_from_response(response, df, query):
-    """Geração de gráficos simplificada e otimizada"""
-    # Tenta encontrar uma coluna relevante baseada na pergunta
-    query = query.lower()
-    response = response.lower() if response else ""
-    
-    # Mapeamento direto de palavras-chave para colunas
-    col_map = {
-        "idade": "Idade",
-        "renda": "Renda_Familiar_R$",
-        "área": "Tamanho_Propriedade_ha",
-        "associado": "É associado a alguma entidade?",
-        "car": "Possui Cadastro Ambiental Rural (CAR)?",
-        "escolaridade": "Escolaridade",
-        "gênero": "Sexo",
-        "macaxeira": "Area_Macaxeira_ha",
-        "mandioca": "Area_Mandioca_ha",
-        "preço": "Preco_Farinha",
-        "farinha": "Preco_Farinha"
-    }
-    
-    # Verifica por correspondência direta
-    col_name = None
-    for key, col in col_map.items():
-        if key in query:
-            if col in df.columns:
-                col_name = col
-                break
-    
-    # Se não encontrou, tenta pela resposta
-    if not col_name:
-        for key, col in col_map.items():
-            if key in response:
-                if col in df.columns:
-                    col_name = col
-                    break
-    
-    # Se encontrou uma coluna, define o gráfico
-    if col_name:
-        if pd.api.types.is_numeric_dtype(df[col_name]):
-            return {
-                "type": "histogram",
-                "params": {
-                    "x": col_name,
-                    "title": f"Distribuição de {col_name}"
-                }
-            }
-        else:
-            counts = df[col_name].value_counts().nlargest(10)
-            return {
-                "type": "bar",
-                "params": {
-                    "x": counts.index,
-                    "y": counts.values,
-                    "title": f"Distribuição de {col_name}"
-                }
-            }
-    
-    # Fallback: gráfico de idade se disponível
-    if "Idade" in df.columns:
-        return {
-            "type": "histogram",
-            "params": {
-                "x": "Idade",
-                "title": "Distribuição Etária"
-            }
-        }
-    
-    return None
+
 
 def render_plot_from_config(plot_config, df):
     import plotly.express as px
@@ -377,7 +313,6 @@ comunidades = st.sidebar.multiselect(
     options=df['Comunidade'].unique(),
     default=df['Comunidade'].unique()
 )
-deepseek_api_key = st.sidebar.text_input("DeepSeek API Key", type="password", key="deepseek_key")
 
 idade_min = int(df['Idade'].min()) if 'Idade' in df.columns and not df['Idade'].isnull().all() else 18
 idade_max = int(df['Idade'].max()) if 'Idade' in df.columns and not df['Idade'].isnull().all() else 100
@@ -1124,10 +1059,7 @@ with maniv_ai_tab:
                 elif msg["role"] == "user":
                     with st.chat_message("user"):
                         st.markdown(msg["content"])
-            else:
-                # Opcional: Você pode adicionar um log aqui para mensagens malformadas
-                # print(f"Aviso: Mensagem malformada encontrada no histórico do chat: {msg}")
-                pass # Ignora mensagens malformadas para evitar o erro
+
 
     # Input container
     with st.form(key='chat_form', clear_on_submit=True):
