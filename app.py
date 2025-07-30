@@ -15,10 +15,7 @@ from langchain.prompts import PromptTemplate
 from langchain_community.embeddings import HuggingFaceEmbeddings # Usado para embeddings
 from langchain_deepseek import ChatDeepSeek # Usar ChatDeepSeek para o LLM
 
-
-
-import re
-from collections import Counter
+import json
 # Configuração inicial
 st.set_page_config(
     page_title="Dashboard de Produção de Mandioca - Juruti",
@@ -208,37 +205,215 @@ def setup_rag_system(df, api_key):
 def consultar_rag_sistema(qa_chain, query, df):
     try:
         result = qa_chain({"query": query})
+        
+        plot_config = generate_plot_config_based_on_query(query, df)
         return {
             "text": result["result"],
-            "source": "DeepSeek RAG System"
+            "source": "DeepSeek RAG System",
+            "plot_config": plot_config
         }
     except Exception as e:
         return {
             "text": f"⚠️ Erro no sistema RAG: {str(e)}",
-            "source": "Sistema"
+            "source": "Sistema",
+            "plot_config": None
         }
 
+def generate_plot_config_based_on_query(query, df):
+    """
+    Gera configurações de gráfico baseadas na pergunta e nos dados disponíveis de forma genérica.
+    """
+    if df.empty:
+        return None
+    
+    query_lower = query.lower()
+    plot_config = None
+    
+    if not query.strip():
+        return None  # pergunta vazia ou inválida
 
+    # Se IA gerar algo genérico como "não tenho dados", evite gráfico também
+    if query.lower().strip() in ["não sei", "não tenho dados sobre isso"]:
+        return None
+    # 1. Primeiro, verificar se a pergunta menciona alguma coluna específica
+    mentioned_columns = [col for col in df.columns if col.lower() in query_lower]
+    
+    # 2. Se encontramos colunas mencionadas, tentar criar um gráfico relevante
+    if mentioned_columns:
+        for col in mentioned_columns:
+            # Para colunas numéricas
+            if pd.api.types.is_numeric_dtype(df[col]):
+                plot_config = handle_numeric_column(col, df, query_lower)
+                if plot_config:
+                    return plot_config
+            
+            # Para colunas categóricas/texto
+            elif pd.api.types.is_string_dtype(df[col]):
+                plot_config = handle_text_column(col, df, query_lower)
+                if plot_config:
+                    return plot_config
+    
+    # 3. Se não encontrou colunas mencionadas, tentar inferir pelo contexto da pergunta
+    return infer_plot_from_query_context(query_lower, df)
+
+def handle_numeric_column(col, df, query_lower):
+    """
+    Gera configurações de gráfico para colunas numéricas.
+    """
+    # Verificar se a pergunta pede comparação entre grupos
+    if "comparar" in query_lower or "entre" in query_lower:
+        # Tentar encontrar uma coluna categórica para agrupar
+        categorical_cols = [c for c in df.columns if pd.api.types.is_string_dtype(df[c]) and c != col]
+        
+        if categorical_cols:
+            group_by = categorical_cols[0]  # Pega a primeira coluna categórica
+            return {
+                "type": "box",
+                "params": {
+                    "x": group_by,
+                    "y": col,
+                    "title": f"Distribuição de {col} por {group_by}",
+                    "labels": {group_by: group_by, col: col}
+                }
+            }
+    
+    # Gráfico de distribuição padrão para numéricos
+    return {
+        "type": "histogram",
+        "params": {
+            "x": col,
+            "title": f"Distribuição de {col}",
+            "labels": {col: col}
+        }
+    }
+
+def handle_text_column(col, df, query_lower):
+    """
+    Gera configurações de gráfico para colunas de texto/categóricas.
+    """
+    # Se a pergunta pede contagem ou frequência
+    if "quantos" in query_lower or "frequência" in query_lower or "contagem" in query_lower:
+        top_values = df[col].value_counts().head(10)
+        return {
+            "type": "bar",
+            "params": {
+                "x": top_values.index,
+                "y": top_values.values,
+                "title": f"Frequência de valores em {col}",
+                "labels": {"x": col, "y": "Contagem"}
+            }
+        }
+    
+    # Se a coluna parece ter múltiplos valores separados por vírgula
+    if df[col].str.contains(',').any():
+        try:
+            exploded = df[col].str.split(',').explode()
+            top_values = exploded.value_counts().head(10)
+            return {
+                "type": "bar",
+                "params": {
+                    "x": top_values.index,
+                    "y": top_values.values,
+                    "title": f"Frequência de valores em {col}",
+                    "labels": {"x": col, "y": "Contagem"}
+                }
+            }
+        except:
+            pass
+    
+    # Gráfico de pizza para categorias com poucos valores únicos
+    if df[col].nunique() <= 10:
+        value_counts = df[col].value_counts()
+        return {
+            "type": "pie",
+            "params": {
+                "names": value_counts.index,
+                "values": value_counts.values,
+                "title": f"Distribuição de {col}"
+            }
+        }
+    
+    return None
+
+def infer_plot_from_query_context(query_lower, df):
+    """
+    Tenta inferir o gráfico apropriado baseado no contexto da pergunta.
+    """
+    # Perguntas sobre distribuição
+    if "distribuição" in query_lower or "como estão distribuídos" in query_lower:
+        # Encontrar a primeira coluna numérica
+        numeric_cols = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
+        if numeric_cols:
+            return handle_numeric_column(numeric_cols[0], df, query_lower)
+    
+    # Perguntas sobre relação entre variáveis
+    elif "relação" in query_lower or "correlação" in query_lower or "associação" in query_lower:
+        numeric_cols = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
+        if len(numeric_cols) >= 2:
+            return {
+                "type": "scatter",
+                "params": {
+                    "x": numeric_cols[0],
+                    "y": numeric_cols[1],
+                    "title": f"Relação entre {numeric_cols[0]} e {numeric_cols[1]}",
+                    "labels": {numeric_cols[0]: numeric_cols[0], numeric_cols[1]: numeric_cols[1]}
+                }
+            }
+    
+    # Perguntas sobre tendências ao longo do tempo (se houver coluna de data)
+    elif "tendência" in query_lower or "evolução" in query_lower or "ao longo do tempo" in query_lower:
+        date_cols = [col for col in df.columns if pd.api.types.is_datetime64_any_dtype(df[col])]
+        if date_cols:
+            numeric_cols = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
+            if numeric_cols:
+                return {
+                    "type": "line",
+                    "params": {
+                        "x": date_cols[0],
+                        "y": numeric_cols[0],
+                        "title": f"Evolução de {numeric_cols[0]} ao longo do tempo",
+                        "labels": {date_cols[0]: "Data", numeric_cols[0]: numeric_cols[0]}
+                    }
+                }
+    
+    # Se não conseguir inferir, mostrar estatísticas das primeiras colunas numéricas
+    # numeric_cols = [col for col in df.columns if pd.api.types.is_numeric_dtype(df[col])]
+    # if numeric_cols:
+    #     return handle_numeric_column(numeric_cols[0], df, query_lower)
+    
+    # # Se não houver colunas numéricas, mostrar distribuição da primeira coluna categórica
+    # text_cols = [col for col in df.columns if pd.api.types.is_string_dtype(df[col])]
+    # if text_cols:
+    #     return handle_text_column(text_cols[0], df, query_lower)
+    
+    return None
 
 def render_plot_from_config(plot_config, df):
-    import plotly.express as px
-
     if not plot_config:
         return None
 
     plot_type = plot_config["type"]
     params = plot_config["params"]
 
-    if plot_type == "histogram":
-        return px.histogram(df, **params)
-    elif plot_type == "box":
-        return px.box(df, **params)
-    elif plot_type == "scatter":
-        return px.scatter(df, **params)
-    elif plot_type == "bar":
-        return px.bar(x=params["x"], y=params["y"], title=params["title"], labels=params["labels"])
-    elif plot_type == "pie":
-        return px.pie(names=params["names"], values=params["values"], title=params["title"])
+    try:
+        if plot_type == "histogram":
+            return px.histogram(df, **params)
+        elif plot_type == "box":
+            return px.box(df, **params)
+        elif plot_type == "scatter":
+            return px.scatter(df, **params)
+        elif plot_type == "bar":
+            return px.bar(x=params["x"], y=params["y"], 
+                         title=params.get("title"), 
+                         labels=params.get("labels"))
+        elif plot_type == "pie":
+            return px.pie(names=params["names"], values=params["values"], 
+                         title=params.get("title"))
+        elif plot_type == "line":
+            return px.line(df, **params)
+    except Exception as e:
+        st.error(f"Erro ao renderizar gráfico: {str(e)}")
+        return None
 
     return None
 
@@ -356,6 +531,20 @@ if 'Idade' in filtered_df.columns:
         filtered_df['Idade'].between(idade_range[0], idade_range[1])
     ]
 
+# --- Adição para carregar e injetar o JSON ---
+try:
+    with open('RedeDificuldades.json', 'r', encoding='utf-8') as f:
+        rede_dificuldades_json_data = json.load(f)
+    # Converter para string JSON para injetar no JavaScript
+    rede_dificuldades_json_string = json.dumps(rede_dificuldades_json_data)
+except FileNotFoundError:
+    st.error("Erro: O arquivo 'RedeDificuldades.json' não foi encontrado. Certifique-se de que ele está na mesma pasta que o 'teste.py'.")
+    rede_dificuldades_json_string = "[]" # Injeta um array vazio para evitar erros
+except Exception as e:
+    st.error(f"Erro ao carregar 'RedeDificuldades.json': {e}")
+    rede_dificuldades_json_string = "[]"
+    
+    
 # Layout principal
 st.title("🌱 Impacto do Projeto Maniva Tapajós em Juruti")
 st.markdown("Este painel analisa os dados coletados de produtores de mandioca e macaxeira na região de Juruti, "
@@ -398,486 +587,7 @@ with col5:
         st.metric("Associados", "Dado indisponível")
 
 st.markdown("---")
-st.title("Rede do Maniva Tapajós na Região de Juruti")
-network_html = """
-                <!DOCTYPE html>
-                <html lang="pt-br">
 
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Rede Maniva Tapajós - D3.js</title>
-                    <script src="https://d3js.org/d3.v7.min.js"></script>
-                    <style>
-                        body {
-                            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                            margin: 0;
-                            padding: 20px;
-                            background-color: #f5f5f5;
-                            color: #333;
-                        }
-
-                        h1 {
-                            text-align: center;
-                            color: #5d4a36;
-                            margin-bottom: 30px;
-                        }
-
-                        #filter-container {
-                            display: flex;
-                            justify-content: center;
-                            align-items: center;
-                            margin-bottom: 20px;
-                            padding: 15px;
-                            background-color: #fff;
-                            border-radius: 8px;
-                            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-                        }
-
-                        #filter-container label {
-                            font-weight: bold;
-                            margin-right: 10px;
-                            color: #5d4a36;
-                        }
-
-                        #comunidade-select {
-                            padding: 8px 15px;
-                            border: 1px solid #c5b8a8;
-                            border-radius: 4px;
-                            background-color: #f8f4f0;
-                            font-size: 16px;
-                            color: #5d4a36;
-                            cursor: pointer;
-                        }
-
-                        #comunidade-select:focus {
-                            outline: none;
-                            border-color: #a52a2a;
-                        }
-
-                        #graph-container {
-                            width: 100%;
-                            height: 600px;
-                            background-color: #f8f4f0;
-                            border-radius: 10px;
-                            border: 1px solid #c5b8a8;
-                            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-                            overflow: hidden;
-                        }
-
-                        .node {
-                            stroke: #fff;
-                            stroke-width: 1.5px;
-                            cursor: pointer;
-                            transition: r 0.2s ease;
-                        }
-
-                        .node:hover {
-                            stroke-width: 3px;
-                        }
-
-                        .link {
-                            stroke: #999;
-                            stroke-opacity: 0.6;
-                        }
-
-                        .label {
-                            font-size: 10px;
-                            fill: #333;
-                            pointer-events: none;
-                            text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff, 0 -1px 0 #fff;
-                        }
-
-                        .legend {
-                            margin-top: 20px;
-                            padding: 15px;
-                            background-color: #fff;
-                            border-radius: 8px;
-                            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-                            display: flex;
-                            flex-wrap: wrap;
-                            justify-content: center;
-                            gap: 15px;
-                        }
-
-                        .legend-item {
-                            display: flex;
-                            align-items: center;
-                            margin: 0 10px;
-                        }
-
-                        .legend-color {
-                            width: 20px;
-                            height: 20px;
-                            border-radius: 50%;
-                            margin-right: 8px;
-                        }
-
-                        .tooltip {
-                            position: absolute;
-                            padding: 8px 12px;
-                            background: rgba(0, 0, 0, 0.8);
-                            color: white;
-                            border-radius: 4px;
-                            pointer-events: none;
-                            font-size: 14px;
-                            z-index: 10;
-                            opacity: 0;
-                            transition: opacity 0.3s;
-                        }
-                        @media (max-width: 768px) {
-                            #graph-container {
-                                height: 400px; /* Altura reduzida para tablets */
-                            }
-                            
-                            .label {
-                                font-size: 8px; /* Rótulos menores */
-                            }
-                            
-                            .legend {
-                                flex-direction: column; /* Legenda em coluna */
-                                align-items: flex-start;
-                                gap: 5px;
-                            }
-                            
-                            .legend-item {
-                                margin: 0;
-                            }
-                            
-                            #filter-container {
-                                flex-direction: column; /* Filtro em coluna */
-                                align-items: flex-start;
-                            }
-                            
-                            #comunidade-select {
-                                width: 100%;
-                                margin-top: 10px;
-                            }
-                        }
-                        
-                        @media (max-width: 480px) {
-                            #graph-container {
-                                height: 300px; /* Altura ainda menor para celulares */
-                            }
-                            
-                            .node {
-                                r: 4; /* Nós menores */
-                            }
-                            
-                            h1 {
-                                font-size: 1.2rem; /* Título menor */
-                            }
-                        }
-
-                    </style>
-                </head>
-
-                <body>
-                    <h1>Rede Maniva Tapajós</h1>
-
-                    <div id="filter-container">
-                        <label for="comunidade-select">Filtrar por Comunidade:</label>
-                        <select id="comunidade-select">
-                            <option value="Todos">Todas</option>
-                            <option value="Comunidade Café torrado">Comunidade Café torrado</option>
-                            <option value="Comunidade Maravilha">Comunidade Maravilha</option>
-                            <option value="Castanhal">Castanhal</option>
-                            <option value="Comunidade Pau Darco">Comunidade Pau Darco</option>
-                        </select>
-                    </div>
-
-                    <div id="graph-container"></div>
-
-                    <div class="legend">
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #a52a2a;"></div>
-                            <span>Maniva Tapajós</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #5d4a36;"></div>
-                            <span>Propriedades</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #d2b48c;"></div>
-                            <span>APRAS</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #cd853f;"></div>
-                            <span>STTR</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #8b4513;"></div>
-                            <span>ACORJUVE</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #a0522d;"></div>
-                            <span>ACOGLEC</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #d2691e;"></div>
-                            <span>ACOJUV</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #bc8f8f;"></div>
-                            <span>Sindicato</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #f4a460;"></div>
-                            <span>CONJUV</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background-color: #808080;"></div>
-                            <span>N.A.</span>
-                        </div>
-                    </div>
-
-                    <div class="tooltip"></div>
-
-                    <script>
-                        // Dados da rede
-                        const dados = [
-                            ["Sítio 7 irmãos", "APRAS", "Comunidade Café torrado"],
-                            ["Sítio Campo Verde", "STTR", "Comunidade Café torrado"],
-                            ["Sítio Nova Vida", "STTR", "Comunidade Café torrado"],
-                            ["Sítio Santa Rosa", "APRAS", "Comunidade Café torrado"],
-                            ["Sítio Lobão", "APRAS", "Comunidade Café torrado"],
-                            ["Sítio Terra Preta", "N.A.", "Comunidade Café torrado"],
-                            ["Sítio Mãe Liuca", "APRAS", "Comunidade Café torrado"],
-                            ["Sítio Pimentel", "N.A.", "Comunidade Café torrado"],
-                            ["Fazenda Pingo D'Água", "APRAS", "Comunidade Café torrado"],
-                            ["Sítio Coelho", "ACORJUVE", "Comunidade Maravilha"],
-                            ["Sítio Sucuri", "ACORJUVE", "Comunidade Maravilha"],
-                            ["Sítio Boa Esperança", "ACORJUVE", "Comunidade Maravilha"],
-                            ["Sítio Bom Pará", "ACORJUVE", "Comunidade Maravilha"],
-                            ["Sítio Nova Lembrança", "ACORJUVE", "Comunidade Maravilha"],
-                            ["Sítio São Bento", "ACORJUVE", "Comunidade Maravilha"],
-                            ["Sítio Cumaru", "ACORJUVE", "Comunidade Maravilha"],
-                            ["Sítio Nova Vida", "ACOGLEC", "Castanhal"],
-                            ["Sítio Salbal", "ACOGLEC", "Castanhal"],
-                            ["Sítio Baixa da Serra", "ACOGLEC", "Castanhal"],
-                            ["Sítio Bom Viver", "ACOGLEC", "Castanhal"],
-                            ["Sítio São Raimundo 2", "ACOGLEC", "Castanhal"],
-                            ["Nova Vida", "ACOJUV", "Comunidade Pau Darco"],
-                            ["Sítio Santa Rosa", "Sindicato do trabalhador", "Comunidade Pau Darco"],
-                            ["Sítio só Um", "ACOJUV", "Comunidade Pau Darco"],
-                            ["Sítio Arara azul", "ACOJUV", "Comunidade Pau Darco"],
-                            ["Sítio Fé em Deus", "CONJUV", "Comunidade Pau Darco"],
-                            ["Sítio Boa Esperança", "CONJUV", "Comunidade Pau Darco"]
-                        ];
-
-                        // Cores para as organizações
-                        const orgColors = {
-                            "APRAS": "#d2b48c",
-                            "STTR": "#cd853f",
-                            "ACORJUVE": "#8b4513",
-                            "ACOGLEC": "#a0522d",
-                            "ACOJUV": "#d2691e",
-                            "SINDICATO DO TRABALHADOR": "#bc8f8f",
-                            "CONJUV": "#f4a460",
-                            "N.A.": "#808080"
-                        };
-
-                        // Configurações do gráfico
-                        const width = document.getElementById('graph-container').clientWidth;
-                        const height = document.getElementById('graph-container').clientHeight;
-
-                        // Cria o SVG
-                        const svg = d3.select("#graph-container")
-                            .append("svg")
-                            .attr("width", width)
-                            .attr("height", height);
-
-                        // Elemento para tooltip
-                        const tooltip = d3.select(".tooltip");
-
-                        // Cria o gráfico inicial
-                        createGraph("Todos");
-
-                        // Função para criar o gráfico com base na comunidade selecionada
-                        function createGraph(selectedComunidade) {
-                            // Limpa o SVG
-                            svg.selectAll("*").remove();
-
-                            // Inicializa os arrays para nós e links
-                            const nodes = [];
-                            const links = [];
-
-                            // Adiciona o nó central
-                            nodes.push({
-                                id: "MANIVA TAPAJÓS",
-                                label: "MANIVA TAPAJÓS",
-                                size: 30,
-                                color: "#a52a2a",
-                                type: "central",
-                                comunidade: "Todos"
-                            });
-
-                            // Processa os dados e adiciona os nós e links
-                            dados.forEach(([prop, org, comunidade]) => {
-                                const idProp = prop.toUpperCase().trim();
-                                const idOrg = org.toUpperCase().trim();
-
-                                // Verifica se deve incluir este nó baseado no filtro
-                                if (selectedComunidade !== "Todos" && comunidade !== selectedComunidade) {
-                                    return;
-                                }
-
-                                // Adiciona o nó da propriedade
-                                if (!nodes.find(n => n.id === idProp)) {
-                                    nodes.push({
-                                        id: idProp,
-                                        label: prop,
-                                        size: 7,
-                                        color: "#5d4a36",
-                                        type: "propriedade",
-                                        comunidade: comunidade
-                                    });
-                                }
-
-                                // Adiciona o nó da organização
-                                if (!nodes.find(n => n.id === idOrg)) {
-                                    nodes.push({
-                                        id: idOrg,
-                                        label: org,
-                                        size: 15,
-                                        color: orgColors[idOrg] || "#696969",
-                                        type: "organizacao",
-                                        comunidade: comunidade
-                                    });
-                                }
-
-                                // Adiciona os links
-                                links.push({
-                                    source: idProp,
-                                    target: idOrg,
-                                    size: 2,
-                                    color: "#aaa"
-                                });
-
-                                links.push({
-                                    source: idProp,
-                                    target: "MANIVA TAPAJÓS",
-                                    size: 1,
-                                    color: "#00db92"
-                                });
-
-                                links.push({
-                                    source: idOrg,
-                                    target: "MANIVA TAPAJÓS",
-                                    size: 3,
-                                    color: "#ccc"
-                                });
-                            });
-
-                            // Cria a simulação de força
-                            const simulation = d3.forceSimulation(nodes)
-                                .force("link", d3.forceLink(links).id(d => d.id).distance(150))
-                                .force("charge", d3.forceManyBody().strength(-300))
-                                .force("center", d3.forceCenter(width / 2, height / 2))
-                                .force("collide", d3.forceCollide().radius(d => d.size + 5));
-
-                            // Desenha os links
-                            const link = svg.append("g")
-                                .attr("stroke", "#999")
-                                .attr("stroke-opacity", 0.6)
-                                .selectAll("line")
-                                .data(links)
-                                .join("line")
-                                .attr("stroke-width", d => d.size)
-                                .attr("stroke", d => d.color);
-
-                            // Desenha os nós
-                            const node = svg.append("g")
-                                .attr("stroke", "#fff")
-                                .attr("stroke-width", 1.5)
-                                .selectAll("circle")
-                                .data(nodes)
-                                .join("circle")
-                                .attr("r", d => d.size)
-                                .attr("fill", d => d.color)
-                                .attr("class", "node")
-                                .call(d3.drag()
-                                    .on("start", dragstarted)
-                                    .on("drag", dragged)
-                                    .on("end", dragended))
-                                .on("mouseover", function (event, d) {
-                                    // Aumenta o nó
-                                    d3.select(this).attr("r", d.size * 1.5);
-
-                                    // Mostra tooltip
-                                    tooltip.style("opacity", 1)
-                                        .html(`<strong>${d.label}</strong><br>${d.type === "propriedade" ? "Propriedade" : d.type === "organizacao" ? "Organização" : "Central"}<br>Comunidade: ${d.comunidade}`)
-                                        .style("left", (event.pageX + 10) + "px")
-                                        .style("top", (event.pageY - 28) + "px");
-                                })
-                                .on("mouseout", function (event, d) {
-                                    // Retorna ao tamanho original
-                                    d3.select(this).attr("r", d.size);
-
-                                    // Esconde tooltip
-                                    tooltip.style("opacity", 0);
-                                });
-
-                            // Adiciona rótulos
-                            const label = svg.append("g")
-                                .attr("class", "labels")
-                                .selectAll("text")
-                                .data(nodes)
-                                .join("text")
-                                .attr("class", "label")
-                                .text(d => d.label)
-                                .attr("font-size", d => d.type === "central" ? 14 : 10)
-                                .attr("dx", d => d.type === "central" ? 20 : 12)
-                                .attr("dy", ".35em");
-
-                            
-                            simulation.on("tick", () => {
-                                link
-                                    .attr("x1", d => d.source.x)
-                                    .attr("y1", d => d.source.y)
-                                    .attr("x2", d => d.target.x)
-                                    .attr("y2", d => d.target.y);
-
-                                node
-                                    .attr("cx", d => d.x)
-                                    .attr("cy", d => d.y);
-
-                                label
-                                    .attr("x", d => d.x)
-                                    .attr("y", d => d.y);
-                            });
-
-                            
-                            function dragstarted(event, d) {
-                                if (!event.active) simulation.alphaTarget(0.3).restart();
-                                d.fx = d.x;
-                                d.fy = d.y;
-                            }
-
-                            function dragged(event, d) {
-                                d.fx = event.x;
-                                d.fy = event.y;
-                            }
-
-                            function dragended(event, d) {
-                                if (!event.active) simulation.alphaTarget(0);
-                                d.fx = null;
-                                d.fy = null;
-                            }
-                        }
-
-                        // Adiciona o evento de mudança no seletor de comunidade
-                        document.getElementById("comunidade-select").addEventListener("change", function () {
-                            createGraph(this.value);
-                        });
-                    </script>
-                </body>
-
-                </html>
-    """
-
-
-components.html(network_html, height=700, scrolling=True)
 
 st.title('Navegue Pelos Dados')
 
@@ -1080,6 +790,11 @@ with maniv_ai_tab:
                     response = consultar_rag_sistema(qa_chain, prompt, df)
                     st.markdown(response["text"])
                     st.session_state.web_chat_history.append(response)
+                    
+                    if response.get("plot_config"):
+                        fig = render_plot_from_config(response["plot_config"], df)
+                        if fig:
+                            st.plotly_chart(fig, use_container_width=True)
 
                     
     
@@ -1177,110 +892,111 @@ with tab2:
         st.warning("Dados de área plantada específica não disponíveis") 
     
     # RANK 
-    container_rank = st.container(height=600)
-    with container_rank:
+    # container_rank = st.container(height=600)
+    # with container_rank:
         
         
-        # Layout modificado com classe
-        st.markdown('<div class="rank-column" style="display:flex; gap:20px;">', unsafe_allow_html=True)
-        # Cálculo da área total
-        filtered_df['Area_Total_ha'] = filtered_df['Area_Mandioca_ha'] + filtered_df['Area_Macaxeira_ha']
+    #     # Layout modificado com classe
+    #     st.markdown('<div class="rank-column" style="display:flex; gap:20px;">', unsafe_allow_html=True)
+    #     # Cálculo da área total
+    #     filtered_df['Area_Total_ha'] = filtered_df['Area_Mandioca_ha'] + filtered_df['Area_Macaxeira_ha']
         
-        st.header('Rank dos Sítios por Área Plantada')
+    #     st.header('Rank dos Sítios por Área Plantada')
         
-        # Dropdown para seleção do tipo de ranking
-        ranking_option = st.selectbox(
-            'Selecione o ranking:',
-            options=['Top 5', 'Top 10', 'Todos'],
-            index=0
-        )
+    #     # Dropdown para seleção do tipo de ranking
+    #     ranking_option = st.selectbox(
+    #         'Selecione o ranking:',
+    #         options=['Top 5', 'Top 10', 'Todos'],
+    #         index=0
+    #     )
         
-        # Ordena o DataFrame
-        sorted_df = filtered_df.sort_values(by='Area_Total_ha', ascending=False)
+    #     # Ordena o DataFrame
+    #     sorted_df = filtered_df.sort_values(by='Area_Total_ha', ascending=False)
         
-        # Aplica o filtro
-        if ranking_option == 'Top 5':
-            ranked_df = sorted_df.head(5)
-        elif ranking_option == 'Top 10':
-            ranked_df = sorted_df.head(10)
-        else:
-            ranked_df = sorted_df
+    #     # Aplica o filtro
+    #     if ranking_option == 'Top 5':
+    #         ranked_df = sorted_df.head(5)
+    #     elif ranking_option == 'Top 10':
+    #         ranked_df = sorted_df.head(10)
+    #     else:
+    #         ranked_df = sorted_df
         
-        # CSS para estilização
-        st.markdown("""
-        <style>
-            .gold {
-                background-color: #FFD700 !important;
-                color: #000;
-                font-weight: bold;
-                border-radius: 8px;
-                padding: 10px;
-                margin: 5px 0;
-            }
-            .silver {
-                background-color: #C0C0C0 !important;
-                color: #000;
-                font-weight: bold;
-                border-radius: 8px;
-                padding: 10px;
-                margin: 5px 0;
-            }
-            .bronze {
-                background-color: #CD7F32 !important;
-                color: #000;
-                font-weight: bold;
-                border-radius: 8px;
-                padding: 10px;
-                margin: 5px 0;
-            }
-            .normal {
-                background-color: #f0f2f6;
-                border-radius: 8px;
-                padding: 10px;
-                margin: 5px 0;
-                color: #000
-            }
-            .rank-header {
+    #     # CSS para estilização
+    #     st.markdown("""
+    #     <style>
+    #         .gold {
+    #             background-color: #FFD700 !important;
+    #             color: #000;
+    #             font-weight: bold;
+    #             border-radius: 8px;
+    #             padding: 10px;
+    #             margin: 5px 0;
+    #         }
+    #         .silver {
+    #             background-color: #C0C0C0 !important;
+    #             color: #000;
+    #             font-weight: bold;
+    #             border-radius: 8px;
+    #             padding: 10px;
+    #             margin: 5px 0;
+    #         }
+    #         .bronze {
+    #             background-color: #CD7F32 !important;
+    #             color: #000;
+    #             font-weight: bold;
+    #             border-radius: 8px;
+    #             padding: 10px;
+    #             margin: 5px 0;
+    #         }
+    #         .normal {
+    #             background-color: #f0f2f6;
+    #             border-radius: 8px;
+    #             padding: 10px;
+    #             margin: 5px 0;
+    #             color: #000
+    #         }
+    #         .rank-header {
 
-                font-weight: bold;
-                margin-bottom: 10px;
-            }
-        </style>
-        """, unsafe_allow_html=True)
-        # CSS para mobile
-        st.markdown("""
-        <style>
-            @media (max-width: 768px) {
-                .rank-column {
-                    flex-direction: column !important;
-                    gap: 10px;
-                }
-            }
-        </style>
-        """, unsafe_allow_html=True)
+    #             font-weight: bold;
+    #             margin-bottom: 10px;
+    #         }
+    #     </style>
+    #     """, unsafe_allow_html=True)
+    #     # CSS para mobile
+    #     st.markdown("""
+    #     <style>
+    #         @media (max-width: 768px) {
+    #             .rank-column {
+    #                 flex-direction: column !important;
+    #                 gap: 10px;
+    #             }
+    #         }
+    #     </style>
+    #     """, unsafe_allow_html=True)
         
-        # Cria colunas
-        col_propriedades, col_area, col_comunidade = st.columns(3)
+    #     # Cria colunas
+    #     col_propriedades, col_area, col_comunidade = st.columns(3)
         
-        with col_propriedades:
-            st.markdown('<p class="rank-header">Propriedade</p>', unsafe_allow_html=True)
-            for i, (_, row) in enumerate(ranked_df.iterrows(), start=1):
-                css_class = "gold" if i == 1 else "silver" if i == 2 else "bronze" if i == 3 else "normal"
-                st.markdown(f'<div class="{css_class}">{i}º - {row["Nome da propriedade"]}</div>', unsafe_allow_html=True)
+    #     with col_propriedades:
+    #         st.markdown('<p class="rank-header">Propriedade</p>', unsafe_allow_html=True)
+    #         for i, (_, row) in enumerate(ranked_df.iterrows(), start=1):
+    #             css_class = "gold" if i == 1 else "silver" if i == 2 else "bronze" if i == 3 else "normal"
+    #             st.markdown(f'<div class="{css_class}">{i}º - {row["Nome da propriedade"]}</div>', unsafe_allow_html=True)
                 
-        with col_area:
-            st.markdown('<p class="rank-header">Área Total (ha)</p>', unsafe_allow_html=True)
-            for i, (_, row) in enumerate(ranked_df.iterrows(), start=1):
-                css_class = "gold" if i == 1 else "silver" if i == 2 else "bronze" if i == 3 else "normal"
-                st.markdown(f'<div class="{css_class}">{row["Area_Total_ha"]:.2f}</div>', unsafe_allow_html=True)
+    #     with col_area:
+    #         st.markdown('<p class="rank-header">Área Total (ha)</p>', unsafe_allow_html=True)
+    #         for i, (_, row) in enumerate(ranked_df.iterrows(), start=1):
+    #             css_class = "gold" if i == 1 else "silver" if i == 2 else "bronze" if i == 3 else "normal"
+    #             st.markdown(f'<div class="{css_class}">{row["Area_Total_ha"]:.2f}</div>', unsafe_allow_html=True)
         
-        with col_comunidade:
-            st.markdown('<p class="rank-header">Comunidade</p>', unsafe_allow_html=True)
-            for i, (_, row) in enumerate(ranked_df.iterrows(), start=1):
-                css_class = "gold" if i == 1 else "silver" if i == 2 else "bronze" if i == 3 else "normal"
-                st.markdown(f'<div class="{css_class}">{i}º - {row["Comunidade"]}</div>', unsafe_allow_html=True)
+    #     with col_comunidade:
+    #         st.markdown('<p class="rank-header">Comunidade</p>', unsafe_allow_html=True)
+    #         for i, (_, row) in enumerate(ranked_df.iterrows(), start=1):
+    #             css_class = "gold" if i == 1 else "silver" if i == 2 else "bronze" if i == 3 else "normal"
+    #             st.markdown(f'<div class="{css_class}">{i}º - {row["Comunidade"]}</div>', unsafe_allow_html=True)
         
-        st.markdown('</div>', unsafe_allow_html=True)
+    #     st.markdown('</div>', unsafe_allow_html=True)
+    
             
         
 
@@ -1358,8 +1074,384 @@ with tab2:
             st.warning("Dados de variedades de macaxeira não disponíveis")
 
 with tab3:
-    st.subheader("Comercialização e Processamento")
-    
+    st.subheader("Rede de Dificuldades")
+    network_difs_html = f"""
+    <!DOCTYPE html>
+    <html>
+
+    <head>
+        <script src="https://d3js.org/d3.v7.min.js"></script>
+        <style>
+            body {{
+                margin: 0;
+                overflow: hidden;
+                font-family: Arial, sans-serif;
+                background-color: #f5f5f5;
+            }}
+
+            .node {{
+                stroke-width: 2px;
+                cursor: pointer;
+            }}
+
+            .dificuldade {{
+                fill: #A52A2A;
+            }}
+
+            .produtor {{
+                fill: #667755;
+            }}
+
+            .link {{
+                stroke: #8d6e63ce;
+                stroke-opacity: 0.3;
+            }}
+
+            .node-label {{
+                font-size: 8px;
+                text-anchor: middle;
+                fill: #3E2723;
+                pointer-events: none;
+                font-weight: bold;
+            }}
+
+            .dificuldade-label {{
+                font-size: 10px;
+                font-weight: bold;
+                fill: #5D4037;
+            }}
+
+            #tooltip {{
+                position: absolute;
+                padding: 10px;
+                background: rgba(0, 0, 0, 0.7);
+                color: #fff;
+                border-radius: 5px;
+                border: 1px solid #8D6E63;
+                pointer-events: none;
+                display: none;
+                z-index: 10;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+                font-size: 14px;
+            }}
+
+            #controls {{
+                position: absolute;
+                top: 15px;
+                left: 15px;
+                background: rgba(255, 255, 255, 0.8);
+                padding: 10px;
+                border-radius: 5px;
+                border: 1px solid #BCAAA4;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            }}
+
+            #community-select {{
+                padding: 8px 12px;
+                border: 1px solid #A1887F;
+                border-radius: 4px;
+                background: white;
+                color: #4E342E;
+                font-size: 14px;
+                min-width: 200px;
+            }}
+
+            body>svg>g:nth-child(3)>text {{
+                text-shadow: 1px 0 #fff;
+            }}
+
+            .community-label {{
+                font-size: 14px;
+                font-weight: bold;
+                fill: #5D4037;
+                text-anchor: middle;
+            }}
+        </style>
+        </head>
+
+        <body>
+            <div id="tooltip"></div>
+            <div id="controls">
+                <select id="community-select">
+                    <option value="">Todas as comunidades</option>
+                </select>
+            </div>
+            <svg width="1280px" height="720px"></svg>
+
+            <script>
+                const earthyPalette = [
+                    "#A52A2A", "#667755", "#8D6E63", "#A1887F", "#CCCCAA",
+                    "#5D4037", "#795548", "#BCAAA4", "#4E342E", "#3E2723", "#6D4C41"
+                ];
+
+                let rawDataGlobal = {rede_dificuldades_json_string}; 
+                
+                const comunidadesSet = new Set();
+                rawDataGlobal.forEach(entry => {{
+                    if (entry.Comunidade) {{
+                        comunidadesSet.add(entry.Comunidade);
+                    }}
+                }});
+
+                const communitySelect = d3.select("#community-select");
+                comunidadesSet.forEach(name => {{
+                    communitySelect.append("option")
+                        .attr("value", name)
+                        .text(name);
+                }});
+
+                createGraph("");
+                
+                function createGraph(selectedCommunity) {{
+                    if (!rawDataGlobal) return; 
+
+                    const svg = d3.select("svg");
+                    svg.selectAll("*").remove(); 
+
+                    const width = svg.node().getBoundingClientRect().width;
+                    const height = svg.node().getBoundingClientRect().height;
+                    const tooltip = d3.select("#tooltip");
+
+                    const nodes = [];
+                    const links = [];
+                    const nodeMap = new Map(); 
+                    const comunidadesInfo = new Map(); 
+
+                    function registerComunidade(name) {{
+                        if (!comunidadesInfo.has(name)) {{
+                            const colorIndex = (comunidadesInfo.size + 1) % earthyPalette.length; 
+                            comunidadesInfo.set(name, {{
+                                count: 0,
+                                color: earthyPalette[colorIndex === 0 ? 1 : colorIndex],
+                                nodes: [],
+                                difficulties: new Set(),
+                                position: {{ x: 0, y: 0 }} 
+                            }});
+                        }}
+                        comunidadesInfo.get(name).count++;
+                    }}
+
+                    function registerNode(id, type, comunidade = null) {{
+                        if (!nodeMap.has(id)) {{
+                            const node = {{
+                                id,
+                                type,
+                                comunidade,
+                                degree: 0,
+                                weight: 0,
+                                label: id,
+                                labelSize: 12
+                            }};
+                            nodes.push(node);
+                            nodeMap.set(id, node);
+                            if (comunidade) {{
+                                registerComunidade(comunidade);
+                                comunidadesInfo.get(comunidade).nodes.push(node);
+                            }}
+                        }}
+                        return nodeMap.get(id);
+                    }}
+
+                    rawDataGlobal.forEach(entry => {{
+                        const producerComunidade = entry.Comunidade;
+
+                        if (selectedCommunity && producerComunidade !== selectedCommunity) {{
+                            return;
+                        }}
+
+                        const sourceNode = registerNode(entry.Source, "dificuldade");
+                        const targetNode = registerNode(entry.Target, "produtor", producerComunidade);
+
+                        const link = {{
+                            source: sourceNode.id,
+                            target: targetNode.id,
+                            comunidade: producerComunidade 
+                        }};
+
+                        links.push(link);
+
+                        if (producerComunidade) {{
+                            registerComunidade(producerComunidade);
+                            comunidadesInfo.get(producerComunidade).difficulties.add(entry.Source);
+                        }}
+                    }});
+
+                    if (nodes.length === 0 && selectedCommunity) {{
+                        svg.append("text")
+                            .attr("x", width / 2)
+                            .attr("y", height / 2)
+                            .attr("text-anchor", "middle")
+                            .attr("font-size", "20px")
+                            .attr("fill", "#5D4037")
+                            .text(`Nenhuma dificuldade encontrada para a comunidade: ${{selectedCommunity}}`);
+                        return;
+                    }}
+
+                    function calculateDegreeCentrality() {{
+                        nodes.forEach(node => node.degree = 0);
+
+                        links.forEach(link => {{
+                            const sourceNode = nodeMap.get(link.source);
+                            const targetNode = nodeMap.get(link.target);
+                            if (sourceNode) sourceNode.degree++;
+                            if (targetNode) targetNode.degree++;
+                        }});
+
+                        let maxDegree = 0;
+                        nodes.forEach(node => {{
+                            if (node.degree > maxDegree) maxDegree = node.degree;
+                        }});
+
+                        nodes.forEach(node => {{
+                            node.weight = maxDegree > 0 ? node.degree / maxDegree : 0;
+                            node.labelSize = 8 + node.weight * 8;
+                        }});
+                    }}
+
+                    calculateDegreeCentrality();
+
+                    const simulation = d3.forceSimulation(nodes)
+                        .force("link", d3.forceLink(links).id(d => d.id).distance(150))
+                        .force("charge", d3.forceManyBody().strength(-400))
+                        .force("center", d3.forceCenter(width / 2, height / 2))
+                        .force("collision", d3.forceCollide().radius(d => 10 + d.weight * 30))
+                        .force("community", () => {{
+                            nodes.forEach(node => {{
+                                if (node.comunidade && comunidadesInfo.has(node.comunidade)) {{
+                                    const communityCenter = comunidadesInfo.get(node.comunidade).position;
+                                    if (communityCenter) {{
+                                        const strength = 0.05; 
+                                        node.vx += (communityCenter.x - node.x) * strength;
+                                        node.vy += (communityCenter.y - node.y) * strength;
+                                    }}
+                                }}
+                            }});
+                        }});
+
+                    const link = svg.append("g")
+                        .selectAll("line")
+                        .data(links)
+                        .enter().append("line")
+                        .attr("class", "link")
+                        .attr("stroke-width", 2);
+
+                    const node = svg.append("g")
+                        .selectAll("circle")
+                        .data(nodes)
+                        .enter().append("circle")
+                        .attr("class", d => `node ${{d.type}}`)
+                        .attr("r", d => 6 + d.weight * 30)
+                        .style("fill", d => {{
+                            if (d.type === "dificuldade") {{
+                                return earthyPalette[0]; 
+                            }} else if (d.comunidade && comunidadesInfo.has(d.comunidade)) {{
+                                return comunidadesInfo.get(d.comunidade).color; 
+                            }}
+                            return "#696969"; 
+                        }})
+                        .on("mouseover", (event, d) => {{
+                            let tooltipHtml = `<strong>${{d.id}}</strong><br>`;
+                            tooltipHtml += `<strong>Tipo:</strong> ${{d.type === "dificuldade" ? "Dificuldade" : "Produtor"}}<br>`;
+                            tooltipHtml += `<strong>Grau:</strong> ${{d.degree}} conexões<br>`;
+
+                            if (d.comunidade) {{
+                                tooltipHtml += `<strong>Comunidade:</strong> ${{d.comunidade}}`;
+                            }} else {{ 
+                                const connectedProducersInfo = new Set();
+                                links.forEach(link => {{
+                                    // CORREÇÃO AQUI: link.target já é o objeto do nó, não precisa de nodeMap.get(link.target)
+                                    if (link.source.id === d.id && link.target.type === "produtor") {{ 
+                                        connectedProducersInfo.add(`${{link.target.label}} (${{link.comunidade}})`);
+                                    }}
+                                }});
+
+                                if (connectedProducersInfo.size > 0) {{
+                                    tooltipHtml += `<strong>Produtores afetados:</strong><br>${{Array.from(connectedProducersInfo).join('<br>')}}`;
+                                }} else {{
+                                    tooltipHtml += `<strong>Sem produtores associados diretamente</strong>`;
+                                }}
+                            }}
+
+                            tooltip.style("display", "block")
+                                .html(tooltipHtml)
+                                .style("left", (event.pageX + 15) + "px")
+                                .style("top", (event.pageY - 15) + "px");
+                        }})
+                        .on("mouseout", () => tooltip.style("display", "none"))
+                        .call(d3.drag()
+                            .on("start", dragstarted)
+                            .on("drag", dragged)
+                            .on("end", dragended));
+
+                    const labels = svg.append("g")
+                        .selectAll("text")
+                        .data(nodes)
+                        .enter().append("text")
+                        .attr("class", d => `node-label ${{d.type === 'dificuldade' ? 'dificuldade-label' : ''}}`)
+                        .text(d => d.label)
+                        .attr("font-size", d => d.labelSize)
+                        .attr("dy", d => - (6 + d.weight * 30) - 5);
+
+                    simulation.on("tick", () => {{
+                        link
+                            .attr("x1", d => d.source.x)
+                            .attr("y1", d => d.source.y)
+                            .attr("x2", d => d.target.x)
+                            .attr("y2", d => d.target.y);
+
+                        node
+                            .attr("cx", d => d.x)
+                            .attr("cy", d => d.y);
+
+                        labels
+                            .attr("x", d => d.x)
+                            .attr("y", d => d.y);
+
+                        comunidadesInfo.forEach((info, name) => {{
+                            const communityNodes = info.nodes;
+                            if (communityNodes.length > 0) {{
+                                const centerX = d3.mean(communityNodes, n => n.x);
+                                const centerY = d3.mean(communityNodes, n => n.y);
+                                info.position = {{ x: centerX, y: centerY }};
+                            }}
+                        }});
+                    }});
+
+                    function dragstarted(event) {{
+                        if (!event.active) simulation.alphaTarget(0.3).restart();
+                        event.subject.fx = event.subject.x;
+                        event.subject.fy = event.subject.y;
+                    }}
+
+                    function dragged(event) {{
+                        event.subject.fx = event.x;
+                        event.subject.fy = event.y;
+                    }}
+
+                    function dragended(event) {{
+                        if (!event.active) simulation.alphaTarget(0);
+                        event.subject.fx = null;
+                        event.subject.fy = null;
+                    }}
+
+                    const zoom = d3.zoom()
+                        .scaleExtent([0.5, 8])
+                        .on("zoom", (event) => {{
+                            svg.selectAll("g").attr("transform", event.transform);
+                        }});
+
+                    svg.call(zoom);
+                }}
+
+                d3.select("#community-select").on("change", function () {{
+                    createGraph(this.value);
+                }});
+            </script>
+        </body>
+
+    </html>
+    """
+    components.html(html=network_difs_html, height=700)
     col1, col2 = st.columns(2)
     
     with col1:
