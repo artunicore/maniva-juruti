@@ -8,6 +8,7 @@ import streamlit.components.v1 as components
 
 from transformers import pipeline
 
+
 # Importações corrigidas para LangChain e DeepSeek
 from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
@@ -48,7 +49,9 @@ def load_data():
         'Recebe algum tipo de assistência técnica?': 'Assistencia_Tecnica',
         'Qual tamanho da área destinada ao plantio de MANDIOCA (ha)?': 'Area_Mandioca_ha',
         'Qual tamanho da área destinada ao plantio de MACAXEIRA (ha)?': 'Area_Macaxeira_ha',
-        'Comunidade':'Comunidade'
+        'Comunidade':'Comunidade',
+        'Qual o preço médio de farinha atualmente (kg)?': 'Preco_Farinha',
+        'Quanto tempo demora o processo de produção de farinha e outros derivados (da colheita até venda)?':'Tempo_Producao_Dias'
     }
     
     # Renomear colunas
@@ -56,6 +59,7 @@ def load_data():
         if original in df.columns:
             df.rename(columns={original: new}, inplace=True)
     
+
     return df
 
 df = load_data()
@@ -65,13 +69,17 @@ def preprocess_data(df):
     # Converter colunas numéricas
     numeric_cols = [
         'Tamanho_Propriedade_ha', 'Tamanho_Area_Produtiva_ha', 'Tamanho_Area_Plantada_ha',
-        'Idade', 'Meses_Colheita_Mandioca', 'Area_Mandioca_ha', 'Area_Macaxeira_ha'
+        'Idade', 'Meses_Colheita_Mandioca', 'Area_Mandioca_ha', 'Area_Macaxeira_ha',
+        'Preco_Farinha', 'Tempo_Producao_Dias'
     ]
     
     for col in numeric_cols:
-        if col in df.columns:
-            # Converter para string e depois para numérico, tratando vírgulas
-            df[col] = df[col].astype(str).str.replace(',', '.').apply(pd.to_numeric, errors='coerce')
+            if col == 'Tempo_Producao_Dias':
+
+                df[col] = df[col].str.extract(r'(\d+)').astype(float)
+            else:
+
+                df[col] = df[col].astype(str).str.replace(',', '.').apply(pd.to_numeric, errors='coerce')
     
     # Mapear renda familiar
     if 'Renda_Familiar' in df.columns:
@@ -550,7 +558,40 @@ st.title("🌱 Impacto do Projeto Maniva Tapajós em Juruti")
 st.markdown("Este painel analisa os dados coletados de produtores de mandioca e macaxeira na região de Juruti, "
             "focando em métricas que refletem o impacto de iniciativas de desenvolvimento como o Projeto Maniva Tapajós.")
 
+# --- Inserção do Mapa Interativo ---
+st.title("🗺️ Mapa Interativo das Propriedades")
+st.markdown("Navegue pelo mapa para visualizar a distribuição das propriedades, comunidades e áreas de plantio. Clique em uma comunidade na legenda para dar zoom na área.")
+
+# Carregar dados das coordenadas e o HTML do mapa
+try:
+    # Carrega os dados do CSV que o mapa utiliza
+    coords_df = pd.read_csv('Coordenadas_Separadas.csv')
+    # Converte os dados para o formato JSON, que pode ser injetado no HTML
+    coords_json = coords_df.to_json(orient='records')
+
+    # Carrega o conteúdo do arquivo HTML do mapa
+    with open('mapa.html', 'r', encoding='utf-8') as f:
+        mapa_html = f.read()
+    
+    # Injeta os dados do CSV diretamente no código HTML.
+    # Isso torna o componente do mapa autossuficiente e mais robusto.
+    mapa_html = mapa_html.replace(
+        'const data = await d3.csv("Coordenadas_Separadas.csv", d3.autoType);',
+        f'const data = JSON.parse(`{coords_json}`);'
+    )
+    
+    # Renderiza o mapa no Streamlit
+    components.html(mapa_html, height=720, scrolling=False)
+
+except FileNotFoundError as e:
+    st.error(f"Erro ao carregar arquivo necessário para o mapa: {e.filename}. Certifique-se que 'mapa.html' e 'Coordenadas_Separadas.csv' estão na pasta correta.")
+except Exception as e:
+    st.error(f"Ocorreu um erro inesperado ao renderizar o mapa: {e}")
+
+# --- Fim da Inserção do Mapa ---
+
 st.markdown('---')
+
 st.title('Dados Gerais')
 
 # KPI Cards
@@ -826,13 +867,23 @@ with tab1:
         
         if 'Escolaridade' in filtered_df.columns:
             escolaridade_counts = filtered_df['Escolaridade'].value_counts()
+            # fig = px.bar(
+            #     escolaridade_counts,
+            #     title='Nível de Escolaridade',
+            #     labels={'index': 'Escolaridade', 'value': 'Contagem'},
+            #     orientation='h',
+            #     color_discrete_sequence=[TERRACOTA_PALETTE]
+            # )
             fig = px.bar(
-                escolaridade_counts,
-                title='Nível de Escolaridade',
-                labels={'index': 'Escolaridade', 'value': 'Contagem'},
-                orientation='h',
-                color_discrete_sequence=[TERRACOTA_PALETTE[0]]  # Cor principal
-            )
+                    filtered_df,
+                    y='Escolaridade',
+                    title='Nível de Escolaridade',
+                    labels={'y': 'Nível de Escolaridade', 'count': 'Contagem'},
+                    orientation='h',
+                    color='Escolaridade',
+                    color_discrete_sequence=TERRACOTA_PALETTE
+                )
+
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("Dados de escolaridade não disponíveis")
@@ -840,12 +891,24 @@ with tab1:
     with col2:
         if 'Idade' in filtered_df.columns:
             fig = px.histogram(
-                filtered_df, 
+                filtered_df,
+                labels={'count':'Contagem'}, 
                 x='Idade',
                 nbins=10,
                 title='Distribuição Etária',
                 color='Sexo' if 'Sexo' in filtered_df.columns else None,
-                color_discrete_sequence=TERRACOTA_PALETTE  # Nova cor
+                color_discrete_sequence=TERRACOTA_PALETTE,  # Nova cor
+
+                
+            )
+            fig.update_layout(
+                            bargap=0.5,
+                            yaxis_title='Contagem',
+                            xaxis_title='Idade',
+            )
+                    # Atualiza os traces para mudar o texto do hover
+            fig.update_traces(
+                hovertemplate='Idade: %{x}<br>Contagem: %{y}<br><extra></extra>'
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -867,135 +930,135 @@ with tab2:
     st.subheader("Práticas de Cultivo")
     
     # Bubble Chart
-    if 'Area_Mandioca_ha' in filtered_df.columns and 'Area_Macaxeira_ha' in filtered_df.columns:
-        filtered_df['Area_Total_ha'] = filtered_df['Area_Mandioca_ha'] + filtered_df['Area_Macaxeira_ha']
-        
-        fig = px.scatter(
-            filtered_df,
-            x='Area_Mandioca_ha',
-            y='Area_Macaxeira_ha',
-            size='Area_Total_ha',
-            color='Comunidade',
-            hover_name='Nome da propriedade',
-            title='Relação entre Área de Mandioca e Macaxeira',
-            labels={
-                'Area_Mandioca_ha': 'Área de Mandioca (ha)',
-                'Area_Macaxeira_ha': 'Área de Macaxeira (ha)',
-                'Area_Total_ha': 'Área Total (ha)'
-            },
-            size_max=50,
-            color_discrete_sequence=TERRACOTA_PALETTE  # Nova cor
-        )
-        st.plotly_chart(fig, use_container_width=True)
-        
-    else:
-        st.warning("Dados de área plantada específica não disponíveis") 
-    
-    # RANK 
-    # container_rank = st.container(height=600)
-    # with container_rank:
-        
-        
-    #     # Layout modificado com classe
-    #     st.markdown('<div class="rank-column" style="display:flex; gap:20px;">', unsafe_allow_html=True)
-    #     # Cálculo da área total
+    # if 'Area_Mandioca_ha' in filtered_df.columns and 'Area_Macaxeira_ha' in filtered_df.columns:
     #     filtered_df['Area_Total_ha'] = filtered_df['Area_Mandioca_ha'] + filtered_df['Area_Macaxeira_ha']
         
-    #     st.header('Rank dos Sítios por Área Plantada')
-        
-    #     # Dropdown para seleção do tipo de ranking
-    #     ranking_option = st.selectbox(
-    #         'Selecione o ranking:',
-    #         options=['Top 5', 'Top 10', 'Todos'],
-    #         index=0
+    #     fig = px.scatter(
+    #         filtered_df,
+    #         x='Area_Mandioca_ha',
+    #         y='Area_Macaxeira_ha',
+    #         size='Area_Total_ha',
+    #         color='Comunidade',
+    #         hover_name='Nome da propriedade',
+    #         title='Relação entre Área de Mandioca e Macaxeira',
+    #         labels={
+    #             'Area_Mandioca_ha': 'Área de Mandioca (ha)',
+    #             'Area_Macaxeira_ha': 'Área de Macaxeira (ha)',
+    #             'Area_Total_ha': 'Área Total (ha)'
+    #         },
+    #         size_max=50,
+    #         color_discrete_sequence=TERRACOTA_PALETTE  # Nova cor
     #     )
+    #     st.plotly_chart(fig, use_container_width=True)
         
-    #     # Ordena o DataFrame
-    #     sorted_df = filtered_df.sort_values(by='Area_Total_ha', ascending=False)
+    # else:
+    #     st.warning("Dados de área plantada específica não disponíveis") 
+    
+    # RANK 
+    container_rank = st.container(height=600)
+    with container_rank:
         
-    #     # Aplica o filtro
-    #     if ranking_option == 'Top 5':
-    #         ranked_df = sorted_df.head(5)
-    #     elif ranking_option == 'Top 10':
-    #         ranked_df = sorted_df.head(10)
-    #     else:
-    #         ranked_df = sorted_df
         
-    #     # CSS para estilização
-    #     st.markdown("""
-    #     <style>
-    #         .gold {
-    #             background-color: #FFD700 !important;
-    #             color: #000;
-    #             font-weight: bold;
-    #             border-radius: 8px;
-    #             padding: 10px;
-    #             margin: 5px 0;
-    #         }
-    #         .silver {
-    #             background-color: #C0C0C0 !important;
-    #             color: #000;
-    #             font-weight: bold;
-    #             border-radius: 8px;
-    #             padding: 10px;
-    #             margin: 5px 0;
-    #         }
-    #         .bronze {
-    #             background-color: #CD7F32 !important;
-    #             color: #000;
-    #             font-weight: bold;
-    #             border-radius: 8px;
-    #             padding: 10px;
-    #             margin: 5px 0;
-    #         }
-    #         .normal {
-    #             background-color: #f0f2f6;
-    #             border-radius: 8px;
-    #             padding: 10px;
-    #             margin: 5px 0;
-    #             color: #000
-    #         }
-    #         .rank-header {
+        # Layout modificado com classe
+        st.markdown('<div class="rank-column" style="display:flex; gap:20px;">', unsafe_allow_html=True)
+        # Cálculo da área total
+        filtered_df['Area_Total_ha'] = filtered_df['Area_Mandioca_ha'] + filtered_df['Area_Macaxeira_ha']
+        
+        st.header('Rank dos Sítios por Área Plantada')
+        
+        # Dropdown para seleção do tipo de ranking
+        ranking_option = st.selectbox(
+            'Selecione o ranking:',
+            options=['Top 5', 'Top 10', 'Todos'],
+            index=0
+        )
+        
+        # Ordena o DataFrame
+        sorted_df = filtered_df.sort_values(by='Area_Total_ha', ascending=False)
+        
+        # Aplica o filtro
+        if ranking_option == 'Top 5':
+            ranked_df = sorted_df.head(5)
+        elif ranking_option == 'Top 10':
+            ranked_df = sorted_df.head(10)
+        else:
+            ranked_df = sorted_df
+        
+        # CSS para estilização
+        st.markdown("""
+        <style>
+            .gold {
+                background-color: #FFD700 !important;
+                color: #000;
+                font-weight: bold;
+                border-radius: 8px;
+                padding: 10px;
+                margin: 5px 0;
+            }
+            .silver {
+                background-color: #C0C0C0 !important;
+                color: #000;
+                font-weight: bold;
+                border-radius: 8px;
+                padding: 10px;
+                margin: 5px 0;
+            }
+            .bronze {
+                background-color: #CD7F32 !important;
+                color: #000;
+                font-weight: bold;
+                border-radius: 8px;
+                padding: 10px;
+                margin: 5px 0;
+            }
+            .normal {
+                background-color: #f0f2f6;
+                border-radius: 8px;
+                padding: 10px;
+                margin: 5px 0;
+                color: #000
+            }
+            .rank-header {
 
-    #             font-weight: bold;
-    #             margin-bottom: 10px;
-    #         }
-    #     </style>
-    #     """, unsafe_allow_html=True)
-    #     # CSS para mobile
-    #     st.markdown("""
-    #     <style>
-    #         @media (max-width: 768px) {
-    #             .rank-column {
-    #                 flex-direction: column !important;
-    #                 gap: 10px;
-    #             }
-    #         }
-    #     </style>
-    #     """, unsafe_allow_html=True)
+                font-weight: bold;
+                margin-bottom: 10px;
+            }
+        </style>
+        """, unsafe_allow_html=True)
+        # CSS para mobile
+        st.markdown("""
+        <style>
+            @media (max-width: 768px) {
+                .rank-column {
+                    flex-direction: column !important;
+                    gap: 10px;
+                }
+            }
+        </style>
+        """, unsafe_allow_html=True)
         
-    #     # Cria colunas
-    #     col_propriedades, col_area, col_comunidade = st.columns(3)
+        # Cria colunas
+        col_propriedades, col_area, col_comunidade = st.columns(3)
         
-    #     with col_propriedades:
-    #         st.markdown('<p class="rank-header">Propriedade</p>', unsafe_allow_html=True)
-    #         for i, (_, row) in enumerate(ranked_df.iterrows(), start=1):
-    #             css_class = "gold" if i == 1 else "silver" if i == 2 else "bronze" if i == 3 else "normal"
-    #             st.markdown(f'<div class="{css_class}">{i}º - {row["Nome da propriedade"]}</div>', unsafe_allow_html=True)
+        with col_propriedades:
+            st.markdown('<p class="rank-header">Propriedade</p>', unsafe_allow_html=True)
+            for i, (_, row) in enumerate(ranked_df.iterrows(), start=1):
+                css_class = "gold" if i == 1 else "silver" if i == 2 else "bronze" if i == 3 else "normal"
+                st.markdown(f'<div class="{css_class}">{i}º - {row["Nome da propriedade"]}</div>', unsafe_allow_html=True)
                 
-    #     with col_area:
-    #         st.markdown('<p class="rank-header">Área Total (ha)</p>', unsafe_allow_html=True)
-    #         for i, (_, row) in enumerate(ranked_df.iterrows(), start=1):
-    #             css_class = "gold" if i == 1 else "silver" if i == 2 else "bronze" if i == 3 else "normal"
-    #             st.markdown(f'<div class="{css_class}">{row["Area_Total_ha"]:.2f}</div>', unsafe_allow_html=True)
+        with col_area:
+            st.markdown('<p class="rank-header">Área Total (ha)</p>', unsafe_allow_html=True)
+            for i, (_, row) in enumerate(ranked_df.iterrows(), start=1):
+                css_class = "gold" if i == 1 else "silver" if i == 2 else "bronze" if i == 3 else "normal"
+                st.markdown(f'<div class="{css_class}">{row["Area_Total_ha"]:.2f}</div>', unsafe_allow_html=True)
         
-    #     with col_comunidade:
-    #         st.markdown('<p class="rank-header">Comunidade</p>', unsafe_allow_html=True)
-    #         for i, (_, row) in enumerate(ranked_df.iterrows(), start=1):
-    #             css_class = "gold" if i == 1 else "silver" if i == 2 else "bronze" if i == 3 else "normal"
-    #             st.markdown(f'<div class="{css_class}">{i}º - {row["Comunidade"]}</div>', unsafe_allow_html=True)
+        with col_comunidade:
+            st.markdown('<p class="rank-header">Comunidade</p>', unsafe_allow_html=True)
+            for i, (_, row) in enumerate(ranked_df.iterrows(), start=1):
+                css_class = "gold" if i == 1 else "silver" if i == 2 else "bronze" if i == 3 else "normal"
+                st.markdown(f'<div class="{css_class}">{i}º - {row["Comunidade"]}</div>', unsafe_allow_html=True)
         
-    #     st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
     
             
         
@@ -1320,7 +1383,7 @@ with tab3:
                                 if (node.comunidade && comunidadesInfo.has(node.comunidade)) {{
                                     const communityCenter = comunidadesInfo.get(node.comunidade).position;
                                     if (communityCenter) {{
-                                        const strength = 0.05; 
+                                        const strength = 0.15; 
                                         node.vx += (communityCenter.x - node.x) * strength;
                                         node.vy += (communityCenter.y - node.y) * strength;
                                     }}
@@ -1452,10 +1515,8 @@ with tab3:
     </html>
     """
     components.html(html=network_difs_html, height=700)
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if 'Produtos_Comercializados' in filtered_df.columns:
+
+    if 'Produtos_Comercializados' in filtered_df.columns:
             try:
                 produtos = filtered_df['Produtos_Comercializados'].str.split(', ', expand=True).stack().value_counts()
                 fig = px.bar(
@@ -1467,11 +1528,28 @@ with tab3:
                 st.plotly_chart(fig, use_container_width=True)
             except:
                 st.warning("Erro ao processar produtos comercializados")
-        else:
+    else:
             st.warning("Dados de produtos comercializados não disponíveis")
         
-        st.subheader("Principais Compradores")
-        if 'Com quem comercializa os produtos ?' in filtered_df.columns and not filtered_df['Com quem comercializa os produtos ?'].dropna().empty:
+    col1,col2 = st.columns(2)
+    
+    with col1:
+        if 'Preco_Farinha' in df.columns:
+                media_farinha = df['Preco_Farinha'].mean()
+                st.metric('Preço médio farinha', value=f'R$ {media_farinha:.2f}')
+        else:
+                st.warning("Coluna não encontrada")
+    with col2:
+        if 'Tempo_Producao_Dias' in df.columns:
+            media_tempo = filtered_df['Tempo_Producao_Dias'].mean()
+
+            # Exibir métrica
+            st.metric("Tempo Médio de Produção (dias)", f"{int(media_tempo)} Dias")
+        else:
+                st.warning("Coluna não encontrada")
+
+        
+    if 'Com quem comercializa os produtos ?' in filtered_df.columns and not filtered_df['Com quem comercializa os produtos ?'].dropna().empty:
             compradores = filtered_df['Com quem comercializa os produtos ?'].dropna().str.split(',').explode().str.strip().str.title().value_counts()
             fig_compradores = px.pie(
                 compradores, 
@@ -1479,49 +1557,12 @@ with tab3:
                 values=compradores.values, 
                 title="Para Quem os Produtores Vendem?", 
                 hole=0.4,
-                color_discrete_sequence=TERRACOTA_PALETTE  # Nova cor
+                color_discrete_sequence=TERRACOTA_PALETTE
             )
             st.plotly_chart(fig_compradores, use_container_width=True)
-        else:
+    else:
             st.warning("Dados de locais de comercialização não disponíveis")
-    
-    with col2:
-        if 'Preco_Farinha' in filtered_df.columns:
-            try:
-                precos = filtered_df['Preco_Farinha'].apply(lambda x: pd.to_numeric(str(x).replace(',', '.'), errors='coerce'))
-                precos = precos.dropna()
-                
-                if not precos.empty:
-                    fig = px.histogram(
-                        precos,
-                        title='Distribuição de Preços da Farinha (R$/kg)',
-                        labels={'value': 'Preço (R$/kg)'},
-                        color_discrete_sequence=[TERRACOTA_PALETTE[4]]  # Nova cor
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.warning("Nenhum dado numérico válido para preços")
-            except:
-                st.warning("Erro ao processar preços da farinha")
-        else:
-            st.warning("Dados de preço da farinha não disponíveis")
-        
-        st.subheader("Dificuldades na Comercialização")
-        if 'Dificuldades_Comercializacao' in filtered_df.columns:
-            try:
-                dificuldades = filtered_df['Dificuldades_Comercializacao'].str.split(',', expand=True).stack().value_counts()
-                fig = px.bar(
-                    dificuldades,
-                    title='Dificuldades na Comercialização',
-                    labels={'index': 'Dificuldade', 'value': 'Contagem'},
-                    color_discrete_sequence=[TERRACOTA_PALETTE[2]]  # Nova cor
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            except:
-                st.warning("Erro ao processar dificuldades de comercialização")
-        else:
-            st.warning("Dados de dificuldades na comercialização não disponíveis")
-
+            
 with tab4:
     st.subheader("Dificuldades no Cultivo")
     
@@ -1540,17 +1581,6 @@ with tab4:
     else:
         st.warning("Dados de dificuldades no cultivo não disponíveis")
     
-    if 'Assistencia_Tecnica' in filtered_df.columns:
-        assistencia = filtered_df['Assistencia_Tecnica'].value_counts()
-        fig = px.pie(
-            assistencia,
-            names=assistencia.index,
-            title='Acesso à Assistência Técnica',
-            color_discrete_sequence=TERRACOTA_PALETTE  # Nova cor
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("Dados de assistência técnica não disponíveis")
     
     if 'Dificuldades_Processamento' in filtered_df.columns:
         try:
@@ -1566,6 +1596,8 @@ with tab4:
             st.warning("Erro ao processar dificuldades no processamento")
     else:
         st.warning("Dados de dificuldades no processamento não disponíveis")
+        
+        
     if 'Se sim, quais pragas?' in filtered_df:
         pragas = filtered_df['Se sim, quais pragas?'].str.replace(', ',',').str.replace(' E ',',').str.replace('LARGATA','LAGARTA').str.upper().str.split(',').explode().str.strip().value_counts()
         fig = px.bar(

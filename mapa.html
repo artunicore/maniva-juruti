@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>mapa</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css">
+
+</head>
+
+<body>
+    <style>
+        #mapa {
+            height: 700px;
+            width: auto;
+        }
+
+        .legend {
+            padding: 6px 8px;
+            font: 14px/16px Arial, Helvetica, sans-serif;
+            background: white;
+            background: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            border-radius: 5px;
+        }
+
+        .legend h4 {
+            margin: 0 0 5px;
+            color: #333;
+        }
+
+        .legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.7;
+        }
+
+        .legend-item {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            padding: 2px;
+            border-radius: 3px;
+        }
+
+        .legend-item:hover {
+            background-color: #f4f4f4;
+        }
+
+        .leaflet-control-custom {
+            font-size: 1.2em;
+            line-height: 26px;
+            /* Alinha o ícone verticalmente com o padrão do Leaflet */
+        }
+    </style>
+    <div id="mapa"></div>
+
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script type="module">
+
+        import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
+
+
+        const data = await d3.csv("Coordenadas_Separadas.csv", d3.autoType);
+
+        var map = L.map('mapa').setView([-2.37, -56.05], 11.3); // Zoom ajustado para ver todas as comunidades
+
+        // Camada de imagem de satélite (base)
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+        }).addTo(map);
+
+        // Camada de rótulos (nomes) por cima da imagem
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png').addTo(map);
+
+        // --- Lógica para atribuir cores às comunidades ---
+        const colorPalette = ['#e6194B', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4', '#469990', '#dcbeff', '#9A6324', '#fffac8', '#800000', '#aaffc3', '#808000', '#ffd8b1', '#000075', '#a9a9a9'];
+        const communityColors = new Map();
+        let colorIndex = 0;
+
+        data.forEach(d => {
+            if (d.Comunidade && !communityColors.has(d.Comunidade)) {
+                communityColors.set(d.Comunidade, colorPalette[colorIndex % colorPalette.length]);
+                colorIndex++;
+            }
+        });
+
+        // --- Adicionar legenda ---
+        const legend = L.control({ position: 'bottomright' });
+
+        legend.onAdd = function (mapInstance) {
+            const div = L.DomUtil.create('div', 'info legend');
+            let legendHtml = '<h4>Comunidades</h4>';
+
+            communityColors.forEach((color, name) => {
+                // Adiciona um item de legenda clicável com um atributo de dados para o nome da comunidade
+                legendHtml += `<div class="legend-item" data-community="${name}"><i style="background:${color}"></i> ${name}</div>`;
+            });
+            div.innerHTML = legendHtml;
+
+            // Impede que cliques no mapa ocorram ao clicar na legenda
+            L.DomEvent.disableClickPropagation(div);
+
+            // Adiciona o listener de clique à legenda
+            div.addEventListener('click', function (e) {
+                const target = e.target.closest('.legend-item');
+                if (target) {
+                    const communityName = target.getAttribute('data-community');
+                    const polygon = communityPolygons.get(communityName);
+                    if (polygon) {
+                        map.fitBounds(polygon.getBounds().pad(0.1)); // Zoom com um pouco de margem
+                    }
+                }
+            });
+            return div;
+        };
+        legend.addTo(map);
+
+        // --- Adicionar controles customizados (Reset, Fullscreen) ---
+        L.Control.Custom = L.Control.extend({
+            onAdd: function (map) {
+                const container = L.DomUtil.create('div', 'leaflet-bar leaflet-control');
+
+                // Botão de Reset
+                const resetButton = L.DomUtil.create('a', 'leaflet-control-custom', container);
+                resetButton.innerHTML = '<i class="fa-solid fa-arrows-rotate"></i>';
+                resetButton.href = '#';
+                resetButton.title = 'Resetar Visão';
+                L.DomEvent.on(resetButton, 'click', function (e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    map.setView([-2.37, -56.05], 11.3);
+                });
+
+                // Botão de Tela Cheia
+                const fullScreenButton = L.DomUtil.create('a', 'leaflet-control-custom', container);
+                fullScreenButton.innerHTML = '<i class="fa-solid fa-expand"></i>';
+                fullScreenButton.href = '#';
+                fullScreenButton.title = 'Tela Cheia';
+                L.DomEvent.on(fullScreenButton, 'click', function (e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    map.getContainer().requestFullscreen();
+                });
+
+                // Botão de Sair da Tela Cheia
+                const exitFullScreenButton = L.DomUtil.create('a', 'leaflet-control-custom', container);
+                exitFullScreenButton.innerHTML = '<i class="fa-solid fa-compress"></i>';
+                exitFullScreenButton.href = '#';
+                exitFullScreenButton.title = 'Sair da Tela Cheia';
+                exitFullScreenButton.style.display = 'none'; // Esconde inicialmente
+                L.DomEvent.on(exitFullScreenButton, 'click', function (e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    if (document.exitFullscreen) { document.exitFullscreen(); }
+                });
+
+                // Lógica para alternar os botões de tela cheia
+                document.addEventListener('fullscreenchange', () => {
+                    fullScreenButton.style.display = document.fullscreenElement ? 'none' : 'block';
+                    exitFullScreenButton.style.display = document.fullscreenElement ? 'block' : 'none';
+                });
+
+                return container;
+            },
+        });
+        new L.Control.Custom({ position: 'topleft' }).addTo(map);
+
+        // --- Lógica para desenhar polígonos ao redor das comunidades ---
+
+        // 1. Agrupa as coordenadas por comunidade
+        const communityPolygons = new Map();
+        const communityPoints = new Map();
+        data.forEach(coord => {
+            if (coord.Comunidade && coord.LATITUDE && coord.LONGITUDE) {
+                if (!communityPoints.has(coord.Comunidade)) {
+                    communityPoints.set(coord.Comunidade, []);
+                }
+                // O algoritmo de casco convexo espera pontos no formato [x, y] (longitude, latitude)
+                communityPoints.get(coord.Comunidade).push([coord.LONGITUDE, coord.LATITUDE]);
+            }
+        });
+
+        // 2. Função para calcular o casco convexo (convex hull) usando o algoritmo Monotone Chain
+        function convexHull(points) {
+            points.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+            const lower = [];
+            for (const point of points) {
+                while (lower.length >= 2 && cross_product(lower[lower.length - 2], lower[lower.length - 1], point) <= 0) {
+                    lower.pop();
+                }
+                lower.push(point);
+            }
+            const upper = [];
+            for (let i = points.length - 1; i >= 0; i--) {
+                const point = points[i];
+                while (upper.length >= 2 && cross_product(upper[upper.length - 2], upper[upper.length - 1], point) <= 0) {
+                    upper.pop();
+                }
+                upper.push(point);
+            }
+            upper.pop();
+            lower.pop();
+            return lower.concat(upper);
+        }
+
+        function cross_product(o, a, b) {
+            return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+        }
+
+        // 3. Desenha um polígono para cada comunidade
+        communityPoints.forEach((points, communityName) => {
+            if (points.length < 3) return; // Precisa de pelo menos 3 pontos para formar um polígono
+
+            const hullPoints = convexHull(points);
+            // Converte de volta para o formato do Leaflet [latitude, longitude]
+            const leafletHullPoints = hullPoints.map(p => [p[1], p[0]]);
+            const communityColor = communityColors.get(communityName) || '#808080';
+
+            const polygon = L.polygon(leafletHullPoints, { color: communityColor, weight: 2, fillOpacity: 0.1 }).bindPopup(communityName).addTo(map);
+            communityPolygons.set(communityName, polygon);
+        });
+
+        data.forEach((coord) => {
+            // Pula a linha se não houver coordenadas válidas
+            if (!coord.LATITUDE || !coord.LONGITUDE) {
+                return;
+            }
+
+            var marker = L.marker([coord.LATITUDE, coord.LONGITUDE]).addTo(map);
+            marker.bindPopup(`<b>Produtor:</b> ${coord.Produtor}<br><b>Área (ha):</b> ${coord.TamanhoArea || 'N/A'}<br><b>Comunidade:</b> ${coord.Comunidade}`);
+
+            // --- Lógica para calcular o raio do círculo com base na área ---
+            let areaEmHectares = 0;
+            const valorTamanhoArea = coord.TamanhoArea;
+
+            // Converte o valor da área para um número, tratando strings com vírgula e o texto "Foto aérea"
+            if (typeof valorTamanhoArea === 'string' && valorTamanhoArea.toLowerCase() !== 'foto aérea') {
+                const valorNumerico = parseFloat(valorTamanhoArea.replace(',', '.'));
+                if (!isNaN(valorNumerico)) {
+                    areaEmHectares = valorNumerico;
+                }
+            } else if (typeof valorTamanhoArea === 'number') {
+                areaEmHectares = valorTamanhoArea;
+            }
+
+            // Calcula o raio em metros a partir da área em hectares (1 ha = 10.000 m²)
+            const raioEmMetros = Math.sqrt((areaEmHectares * 10000) / Math.PI);
+
+            // Adiciona o círculo ao mapa apenas se o raio for um número válido e maior que zero
+            if (raioEmMetros > 0 && !isNaN(raioEmMetros)) {
+                const communityColor = communityColors.get(coord.Comunidade) || '#808080'; // Cor cinza para 'sem comunidade'
+
+                L.circle([coord.LATITUDE, coord.LONGITUDE], {
+                    color: communityColor,
+                    fillColor: communityColor,
+                    fillOpacity: 0.5,
+                    radius: raioEmMetros // Usa o raio calculado em metros
+                }).addTo(map);
+            }
+        })
+    </script>
+</body>
+
+</html>
